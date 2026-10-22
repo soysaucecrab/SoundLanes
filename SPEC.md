@@ -5,7 +5,7 @@
 - 대상 환경: macOS 14.2 이상 (개발 기준: macOS 27.0.1, Apple Silicon M5, Swift 6.4)
 
 > **이름 주의**: "SoundSource"는 Rogue Amoeba의 상용 제품명이다. 디렉터리 이름으로만 쓰고,
-> 배포용 앱/바이너리 이름은 **`soundroute` (CLI) / SoundRoute (앱)** 를 작업명으로 사용한다.
+> 배포용 앱/바이너리 이름은 **`soundlanes` (CLI) / SoundLanes (앱)** 를 사용한다.
 
 ---
 
@@ -43,7 +43,7 @@ macOS는 모든 앱이 하나의 "기본 출력 장치"를 공유한다. 앱 자
 | S1 | 기본 출력은 스피커, Chrome만 AirPods로 지정 | YouTube 소리는 AirPods에서만, Music은 스피커에서만 들림 |
 | S2 | 라우팅 중 AirPods 연결 해제 | Chrome 소리는 기본 출력(스피커)으로 자연스럽게 돌아옴. AirPods 재연결 시 자동 복귀 |
 | S3 | 라우팅 중 Chrome 종료 후 재실행 | 재실행된 Chrome에도 같은 규칙이 자동 적용됨 |
-| S4 | `soundroute`가 강제 종료(kill -9)됨 | Chrome 소리는 즉시 기본 출력으로 돌아옴 (무음 상태로 남지 않음) |
+| S4 | `soundlanes`가 강제 종료(kill -9)됨 | Chrome 소리는 즉시 기본 출력으로 돌아옴 (무음 상태로 남지 않음) |
 | S5 | 사용자가 시스템 기본 출력을 바꿈 | 라우팅되지 않은 앱만 새 기본 출력을 따라감. 라우팅된 앱은 지정 장치 유지 |
 | S6 | 지정 장치 = 현재 기본 출력 | 탭을 만들지 않음 (불필요한 처리 없음) |
 
@@ -78,8 +78,8 @@ macOS는 모든 앱이 하나의 "기본 출력 장치"를 공유한다. 앱 자
 ```
 
 ### 3.3 Aggregate Device 구성 (사전)
-- `kAudioAggregateDeviceUIDKey`: `com.zinu.soundroute.<route-id>` (고유)
-- `kAudioAggregateDeviceNameKey`: `SoundRoute <앱 이름> → <장치 이름>`
+- `kAudioAggregateDeviceUIDKey`: `com.zinu.soundlanes.<route-id>` (고유)
+- `kAudioAggregateDeviceNameKey`: `SoundLanes <앱 이름> → <장치 이름>`
 - `kAudioAggregateDeviceIsPrivateKey`: `true` (다른 앱의 장치 목록에 노출되지 않게, 프로세스 종료 시 자동 정리)
 - `kAudioAggregateDeviceMainSubDeviceKey`: 출력 장치 UID
 - `kAudioAggregateDeviceSubDeviceListKey`: `[{ kAudioSubDeviceUIDKey: 출력 장치 UID }]`
@@ -110,8 +110,8 @@ SoundSource/
 │   │   ├── TapRoute.swift          # 탭 1개 + aggregate 1개 + IOProc 1개의 수명주기
 │   │   ├── RouteEngine.swift       # 규칙 집합을 현재 상태에 맞춰 조정 (reconcile)
 │   │   └── Config.swift            # 설정 파일 로드/저장
-│   ├── soundroute/         # CLI (ArgumentParser)
-│   └── SoundRouteApp/      # 메뉴 막대 앱 (SwiftUI MenuBarExtra) — M3
+│   ├── soundlanes/         # CLI (ArgumentParser)
+│   └── SoundLanesApp/      # 메뉴 막대 앱 (SwiftUI MenuBarExtra) — M3
 ├── Tests/RouteCoreTests/
 ├── Resources/Info.plist
 ├── CLAUDE.md
@@ -196,7 +196,7 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 ## 8. 설정
 
 ### 8.1 위치와 형식
-`~/Library/Application Support/SoundRoute/routes.json`
+`~/Library/Application Support/SoundLanes/routes.json`
 
 ```json
 {
@@ -218,22 +218,22 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 
 ---
 
-## 9. CLI 명세 (`soundroute`)
+## 9. CLI 명세 (`soundlanes`)
 
 | 명령 | 설명 |
 |---|---|
-| `soundroute devices` | 출력 장치 목록 (이름, UID, 기본 출력 여부, 샘플레이트, 지연) |
-| `soundroute apps [--all]` | 오디오 프로세스 목록 (앱 이름, 번들 ID, PID, 현재 재생 중 여부). 기본은 재생 중인 것만 |
-| `soundroute add <app> <device> [--volume 0.0-1.0]` | 규칙 추가/수정. `<app>`은 번들 ID 또는 앱 이름, `<device>`는 UID 또는 이름 일부 |
-| `soundroute remove <app>` | 규칙 삭제 |
-| `soundroute list` | 저장된 규칙 |
-| `soundroute run` | 포그라운드에서 규칙 적용 (Ctrl+C로 정리 후 종료) |
-| `soundroute status` | `run` 중인 인스턴스의 활성 라우트, 상태, 오류, 예상 추가 지연 |
-| `soundroute once <app> <device>` | 설정 저장 없이 즉시 라우팅 (실험용) |
+| `soundlanes devices` | 출력 장치 목록 (이름, UID, 기본 출력 여부, 샘플레이트, 지연) |
+| `soundlanes apps [--all]` | 오디오 프로세스 목록 (앱 이름, 번들 ID, PID, 현재 재생 중 여부). 기본은 재생 중인 것만 |
+| `soundlanes add <app> <device> [--volume 0.0-1.0]` | 규칙 추가/수정. `<app>`은 번들 ID 또는 앱 이름, `<device>`는 UID 또는 이름 일부 |
+| `soundlanes remove <app>` | 규칙 삭제 |
+| `soundlanes list` | 저장된 규칙 |
+| `soundlanes run` | 포그라운드에서 규칙 적용 (Ctrl+C로 정리 후 종료) |
+| `soundlanes status` | `run` 중인 인스턴스의 활성 라우트, 상태, 오류, 예상 추가 지연 |
+| `soundlanes once <app> <device>` | 설정 저장 없이 즉시 라우팅 (실험용) |
 
 - 이름 매칭이 여러 개면 후보를 보여주고 종료 코드 `2`.
 - 종료 코드: `0` 성공, `1` 일반 오류, `2` 잘못된 인자/모호한 이름, `3` 권한 없음, `4` 지원하지 않는 macOS.
-- `run`은 단일 인스턴스만 허용 (`~/Library/Application Support/SoundRoute/run.lock`).
+- `run`은 단일 인스턴스만 허용 (`~/Library/Application Support/SoundLanes/run.lock`).
 - `status`는 `run`과 Unix 도메인 소켓으로 통신한다 (JSON 한 줄 요청/응답).
 - `SIGINT`, `SIGTERM`에서 모든 라우트를 정리한다. `SIGKILL`은 §10의 안전장치로 대응한다.
 
@@ -243,9 +243,9 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 
 - **mutedWhenTapped + private aggregate**: 프로세스가 비정상 종료돼도 탭 읽기가 멈추면서 원래 출력 음소거가 풀리고,
   private aggregate는 시스템이 정리한다 → S4 충족. M0에서 `kill -9`로 반드시 확인한다.
-- 시작 시 이전 실행이 남긴 aggregate(UID 접두사 `com.zinu.soundroute.`)가 있으면 삭제한다.
+- 시작 시 이전 실행이 남긴 aggregate(UID 접두사 `com.zinu.soundlanes.`)가 있으면 삭제한다.
 - 탭/장치 생성 실패는 해당 규칙만 `failed`로 두고 다른 규칙은 계속 동작한다.
-- 오류는 `os_log` (subsystem `com.zinu.soundroute`)로 기록한다. 확인: `log stream --predicate 'subsystem == "com.zinu.soundroute"'`
+- 오류는 `os_log` (subsystem `com.zinu.soundlanes`)로 기록한다. 확인: `log stream --predicate 'subsystem == "com.zinu.soundlanes"'`
 
 ---
 
@@ -293,4 +293,4 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 3. AirPods가 aggregate 안에서 고음질(A2DP/AAC) 출력을 유지하는가 (§6)
 4. 실행 중인 탭의 대상 프로세스 목록을 갱신할 수 있는가, 재생성해야 하는가 (§4.3)
 5. CLI 실행 시 TCC 권한 귀속 대상과, 메뉴 막대 앱으로의 권한 이전 방식 (§3.4)
-6. 배포 이름 확정 (작업명 SoundRoute)
+6. ~~배포 이름 확정~~ → **SoundLanes** (CLI `soundlanes`, 번들 ID `com.zinu.soundlanes`)로 확정

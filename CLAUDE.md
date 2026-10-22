@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-앱별 오디오 출력 라우팅 도구 (작업명 **SoundRoute**, CLI `soundroute`).
+앱별 오디오 출력 라우팅 도구 (이름 **SoundLanes**, CLI `soundlanes`).
 예: Music → 내장 스피커, Chrome → AirPods. **전체 요구사항과 설계는 `SPEC.md`가 기준이다.** 구현 전에 반드시 읽는다.
 
 ## 현재 상태
@@ -10,14 +10,14 @@
 ## 환경
 - macOS 27.0.1, Apple Silicon (M5), Swift 6.4, Swift Package Manager
 - 배포 최소 버전: macOS 14.2 (`platforms: [.macOS("14.2")]`). Process Tap API가 이 버전부터 있다.
-- 대상 모듈: `RouteCore` (라이브러리), `soundroute` (CLI), `SoundRouteApp` (메뉴 막대 앱, M3부터)
+- 대상 모듈: `RouteCore` (라이브러리), `soundlanes` (CLI), `SoundLanesApp` (메뉴 막대 앱, M3부터)
 
 ## 명령
 ```sh
 swift build                          # 빌드
 swift test                           # 자동 테스트 (RouteCoreTests)
-swift run soundroute devices         # 실행 예
-log stream --predicate 'subsystem == "com.zinu.soundroute"'   # 로그 확인
+swift run soundlanes devices         # 실행 예
+log stream --predicate 'subsystem == "com.zinu.soundlanes"'   # 로그 확인
 ```
 
 ## 반드시 지킬 것
@@ -25,7 +25,7 @@ log stream --predicate 'subsystem == "com.zinu.soundroute"'   # 로그 확인
 - 탭은 `CATapMuteBehavior.mutedWhenTapped`, aggregate는 `kAudioAggregateDeviceIsPrivateKey = true`로 만든다.
   프로그램이 죽어도 소리가 원래 출력으로 돌아와야 한다 (SPEC §10).
 - 생성 순서는 탭 → aggregate → IOProc → start, 해제는 정확히 그 반대 순서로 한다. 모든 종료 경로(SIGINT, SIGTERM, 오류)에서 정리한다.
-- aggregate UID는 `com.zinu.soundroute.` 접두사를 쓴다. 시작 시 이 접두사로 남은 장치를 정리한다.
+- aggregate UID는 `com.zinu.soundlanes.` 접두사를 쓴다. 시작 시 이 접두사로 남은 장치를 정리한다.
 - **IOProc(실시간 오디오 스레드) 안에서는** 메모리 할당, 락, 로깅, `print`, Swift 클래스 참조 획득/해제, Objective-C 메시지를 금지한다.
   공유 값은 `Synchronization.Atomic`으로 읽고, 미리 할당한 버퍼만 쓴다.
 - Core Audio 호출은 모두 `OSStatus`를 검사하고, 4글자 코드(예: `'!obj'`)를 포함한 Swift 오류로 바꾼다. 실패를 무시하지 않는다.
@@ -44,4 +44,4 @@ log stream --predicate 'subsystem == "com.zinu.soundroute"'   # 로그 확인
 
 ## 주의
 - "SoundSource"는 Rogue Amoeba의 상용 제품명이다. 디렉터리 이름으로만 쓰고, 바이너리·번들 ID·UI 문구에는 쓰지 않는다.
-- 번들 ID 접두사: `com.zinu.soundroute`
+- 번들 ID 접두사: `com.zinu.soundlanes`
