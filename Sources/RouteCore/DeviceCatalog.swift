@@ -13,6 +13,18 @@ public struct OutputDevice: Hashable, Sendable {
     public let transportType: UInt32
     public let inputStreamCount: Int
 
+    public init(object: AudioObject, uid: String, name: String, isDefault: Bool, sampleRate: Double,
+                latencyFrames: UInt32, transportType: UInt32, inputStreamCount: Int) {
+        self.object = object
+        self.uid = uid
+        self.name = name
+        self.isDefault = isDefault
+        self.sampleRate = sampleRate
+        self.latencyFrames = latencyFrames
+        self.transportType = transportType
+        self.inputStreamCount = inputStreamCount
+    }
+
     public var latencyMilliseconds: Double {
         sampleRate > 0 ? Double(latencyFrames) / sampleRate * 1000 : 0
     }
@@ -101,3 +113,5 @@ public enum Resolution<Value> {
     case notFound
     case ambiguous([Value])
 }
+
+extension Resolution: Sendable where Value: Sendable {}

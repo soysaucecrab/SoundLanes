@@ -85,10 +85,13 @@ public final class TapRoute {
         set { meters.pointee.volumeBits.store(Self.clampVolume(newValue).bitPattern, ordering: .relaxed) }
     }
 
-    /// Returns the peak since the previous call and resets it.
-    public func takeReading() -> MeterReading {
-        MeterReading(
-            peak: Float(bitPattern: meters.pointee.peakBits.exchange(0, ordering: .relaxed)),
+    /// Returns the peak since the previous reset; `resetPeak` starts a new measurement window.
+    public func takeReading(resetPeak: Bool = true) -> MeterReading {
+        let peakBits = resetPeak
+            ? meters.pointee.peakBits.exchange(0, ordering: .relaxed)
+            : meters.pointee.peakBits.load(ordering: .relaxed)
+        return MeterReading(
+            peak: Float(bitPattern: peakBits),
             cycles: meters.pointee.cycles.load(ordering: .relaxed),
             missingInputCycles: meters.pointee.missingInputCycles.load(ordering: .relaxed),
             isRunning: ((try? aggregate.read(kAudioDevicePropertyDeviceIsRunning, as: UInt32.self)) ?? 0) != 0)

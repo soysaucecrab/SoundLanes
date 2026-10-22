@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.zinu.soundlanes</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleExecutable</key>
+	<string>SoundLanes</string>
+	<key>CFBundleName</key>
+	<string>SoundLanes</string>
+	<key>CFBundleDisplayName</key>
+	<string>SoundLanes</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>지정한 앱의 소리를 선택한 출력 장치로 보내려면 오디오 캡처 권한이 필요합니다.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AirPods처럼 마이크가 달린 장치로 소리를 보낼 때 macOS가 이 권한을 확인합니다. SoundLanes는 마이크 소리를 사용하지 않습니다.</string>
+</dict>
+</plist>

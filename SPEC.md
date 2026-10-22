@@ -1,7 +1,7 @@
 # SoundLanes — 앱별 오디오 출력 라우팅 명세서
 
 - 작성일: 2026-10-22
-- 상태: M0 기술 검증 중 (§14)
+- 상태: M3 메뉴 막대 앱 구현 완료, 실제 청취 검증 대기 (§14)
 - 대상 환경: macOS 15.0 이상 (개발 기준: macOS 27.0.1, Apple Silicon M5, Swift 6.4)
   - Process Tap API는 14.2부터 있지만, IOProc 공유 값에 쓰는 `Synchronization.Atomic`이 15.0부터라 최소 버전을 15.0으로 정했다 (2026-10-22).
 
@@ -101,7 +101,10 @@ macOS는 모든 앱이 하나의 "기본 출력 장치"를 공유한다. 앱 자
 - 거부돼도 탭·aggregate·IOProc 생성과 `AudioDeviceStart`는 모두 성공을 반환한다. IO만 돌지 않는다
   (`kAudioDevicePropertyDeviceIsRunning = 0`, coreaudiod 로그: `Client is not granted access to the tap.`).
   → CLI는 "IO 주기 0 + 정지 상태"가 2초 이어지면 권한 없음으로 보고 종료 코드 `3`으로 끝낸다.
-- 우회: 시스템 설정 > 개인정보 보호 및 보안 > 화면 및 시스템 오디오 녹음 > **시스템 오디오 녹음만**에 터미널 앱을 직접 추가한다 (검증 중, §14).
+- 우회: 시스템 설정 > 개인정보 보호 및 보안 > 화면 및 시스템 오디오 녹음 > **시스템 오디오 녹음만**에 터미널 앱을 직접 추가한다 (미검증).
+- **앱 번들(`SoundLanes.app`)은 자기 자신이 책임 프로세스다.** `open`으로 실행하면 tccd가 `subject=com.zinu.soundlanes`로
+  확인 창을 띄우고, 허용 후 IO가 정상으로 돈다 (2026-10-23 확인). 그래서 일상 사용은 앱으로 하고, CLI는 설정 편집·상태 확인·실험용으로 쓴다.
+- 앱은 개발 인증서(Apple Development)로 서명한다. 서명이 같으면 다시 빌드해도 권한이 유지된다. ad-hoc 서명은 빌드마다 권한을 새로 받아야 할 수 있다.
 - 출력 장치에 입력 스트림이 있으면(Background Music 같은 루프백 장치, AirPods 마이크) IOProc 생성이나 스트림 사용 설정 때
   **마이크 권한(`kTCCServiceMicrophone`)** 검사가 일어난다. 처음에는 확인 창이 뜨고, 응답할 때까지 해당 Core Audio 호출이 멈춘다.
 
@@ -115,17 +118,21 @@ SoundSource/
 ├── Package.swift
 ├── Sources/
 │   ├── RouteCore/          # 라이브러리: Core Audio 래퍼, 라우팅 엔진 (UI 의존성 없음)
-│   │   ├── AudioObject.swift       # AudioObjectGetPropertyData 등 안전한 Swift 래퍼
-│   │   ├── DeviceCatalog.swift     # 출력 장치 목록·변경 감시
-│   │   ├── ProcessCatalog.swift    # 오디오 프로세스 목록·변경 감시, 앱 매칭
-│   │   ├── AppMatcher.swift        # 번들 ID 규칙 → 프로세스 객체 집합 (헬퍼 포함)
+│   │   ├── AudioObject.swift       # AudioObjectGetPropertyData 등 안전한 Swift 래퍼 (C API는 여기서만 호출)
+│   │   ├── DeviceCatalog.swift     # 출력 장치 목록, 이름/UID 해석
+│   │   ├── ProcessCatalog.swift    # 오디오 프로세스 목록, 앱 이름 해석
+│   │   ├── AppMatcher.swift        # 번들 ID 규칙 → 프로세스 집합, RoutePlanner, 특수 앱 프리셋(§5.2)
 │   │   ├── TapRoute.swift          # 탭 1개 + aggregate 1개 + IOProc 1개의 수명주기
+│   │   ├── IORenderer.swift        # IOProc 렌더링 (실시간 스레드, 할당·락 없음)
+│   │   ├── AudioSystem.swift       # 엔진이 의존하는 프로토콜 + Core Audio 구현
 │   │   ├── RouteEngine.swift       # 규칙 집합을 현재 상태에 맞춰 조정 (reconcile)
-│   │   └── Config.swift            # 설정 파일 로드/저장
+│   │   ├── Config.swift            # 설정 파일 로드/저장
+│   │   └── Control.swift           # 단일 인스턴스 잠금, 제어 소켓 (status/reload)
 │   ├── soundlanes/         # CLI (ArgumentParser)
-│   └── SoundLanesApp/      # 메뉴 막대 앱 (SwiftUI MenuBarExtra) — M3
+│   └── SoundLanesApp/      # 메뉴 막대 앱 (SwiftUI MenuBarExtra)
 ├── Tests/RouteCoreTests/
-├── Resources/Info.plist
+├── Resources/              # CLI·앱 Info.plist, 앱 entitlements, AppIcon.icns
+├── scripts/                # bundle-app.sh (앱 번들 생성·서명), make-icon.swift
 ├── CLAUDE.md
 └── SPEC.md
 ```
@@ -246,7 +253,10 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 - 이름 매칭이 여러 개면 후보를 보여주고 종료 코드 `2`.
 - 종료 코드: `0` 성공, `1` 일반 오류, `2` 잘못된 인자/모호한 이름, `3` 권한 없음, `4` 지원하지 않는 macOS.
 - `run`은 단일 인스턴스만 허용 (`~/Library/Application Support/SoundLanes/run.lock`).
-- `status`는 `run`과 Unix 도메인 소켓으로 통신한다 (JSON 한 줄 요청/응답).
+- `status`는 `run`과 Unix 도메인 소켓으로 통신한다 (JSON 한 줄 요청/응답). 소켓: `~/Library/Application Support/SoundLanes/run.sock`
+  - 요청 `{"command":"status"}` → 응답 `{"ok":true,"owner":"…","routes":[RouteStatus…]}`
+  - 요청 `{"command":"reload"}`: `add`/`remove`가 설정을 저장한 뒤 보내서 실행 중인 인스턴스가 바로 적용하게 한다.
+- 메뉴 막대 앱도 같은 잠금과 소켓을 쓴다. 앱이 실행 중이면 `soundlanes run`은 거부되고, `status`·`add`·`remove`는 앱에 그대로 적용된다.
 - `SIGINT`, `SIGTERM`에서 모든 라우트를 정리한다. `SIGKILL`은 §10의 안전장치로 대응한다.
 
 ---
@@ -262,6 +272,13 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 ---
 
 ## 11. 단계별 계획 (Milestones)
+
+| 단계 | 상태 (2026-10-23) |
+|---|---|
+| M0 | 진행 중: 생성·정리·권한 확인됨, 청취 검증 대기 (§14) |
+| M1, M2 | 구현 완료, 자동 테스트 통과. S1~S6 청취 검증 대기 |
+| M3 | 구현 완료: 메뉴 막대 앱, 앱별 장치·볼륨, 로그인 시 실행 |
+| M4 | 앱 아이콘만 완료. 오류 알림·공증(Developer ID 인증서 필요)은 남음 |
 
 | 단계 | 범위 | 완료 조건 |
 |---|---|---|
@@ -316,13 +333,13 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 ## 14. M0 검증 기록
 
 검증 도구: `soundlanes once <app> <device> [--meter] [--keep-device-input]`. 시작 시 탭 포맷, 샘플레이트, aggregate 스트림 구성을 출력하고,
-`--meter`는 1초마다 입력 레벨·IO 주기를 표시한다.
+`--meter`는 1초마다 입력 레벨·IO 주기를 표시한다. 터미널 권한 문제(§3.4) 때문에 청취 검증은 앱으로 하는 편이 쉽다.
 
 | # | 항목 | 상태 | 결과 |
 |---|---|---|---|
 | 1 | 탭 → aggregate → IOProc → start 생성과 역순 정리 | 확인 | HDMI 장치, Background Music 가상 장치에서 생성·SIGINT 정리 성공. 정리 후 남은 aggregate 없음 |
 | 2 | CLI의 TCC 권한 귀속 (§13-5) | 확인 | 터미널 앱에 귀속. 사용 설명 문자열이 없는 터미널은 창 없이 거부 (§3.4) |
-| 3 | 터미널 앱을 "시스템 오디오 녹음만"에 추가하면 동작하는지 | 미확인 | |
+| 3 | 앱 번들의 권한 | 확인 | `SoundLanes.app`이 자기 이름으로 권한 창을 띄움. 허용 후 Music → 내장 스피커에서 IO 약 95주기/초, 탭 신호 수신, 탭 버퍼 누락 0. 실제로 들리는지는 미확인 |
 | 4 | 헬퍼 매칭 (§13-1) | 일부 | Chrome 오디오 프로세스가 `com.google.Chrome`, `com.google.Chrome.helper`로 보임 → 접두사 규칙과 맞음. 실제 재생 라우팅은 미확인 |
 | 5 | aggregate 입력 스트림 순서 (장치 입력 다음에 탭) | 미확인 | 구현은 이 순서를 가정하고 앞쪽 장치 입력 스트림을 끈다. 틀리면 `--meter`에 "탭 버퍼 없음"이 늘어난다 |
 | 6 | AirPods 고음질 유지 (§13-3) | 미확인 | 장치 입력 스트림을 IOProc 사용 목록에서 끄는 방식으로 구현. 시작 2초 뒤 샘플레이트가 떨어지면 경고 |

@@ -4,19 +4,23 @@
 예: Music → 내장 스피커, Chrome → AirPods. **전체 요구사항과 설계는 `SPEC.md`가 기준이다.** 구현 전에 반드시 읽는다.
 
 ## 현재 상태
-- **M0 기술 검증 중.** `devices`, `apps`, `once`(검증 도구)가 구현돼 있다. 진행 상황은 SPEC §14.
+- M1~M3 구현 완료: CLI 전체 명령, `RouteEngine`, 메뉴 막대 앱. **실제 청취 검증(SPEC §14, §12.2)은 아직이다.**
+- 남은 일: §14 미확인 항목 청취 검증, M4의 오류 알림과 공증.
 - M0 결과(§13 미결정 사항)는 코드보다 먼저 `SPEC.md`에 반영한다.
 
 ## 환경
 - macOS 27.0.1, Apple Silicon (M5), Swift 6.4, Swift Package Manager
 - 배포 최소 버전: macOS 15.0 (`platforms: [.macOS(.v15)]`). Process Tap API는 14.2부터지만 `Synchronization.Atomic`이 15.0부터다.
-- 대상 모듈: `RouteCore` (라이브러리), `soundlanes` (CLI), `SoundLanesApp` (메뉴 막대 앱, M3부터)
+- 대상 모듈: `RouteCore` (라이브러리), `soundlanes` (CLI), `SoundLanesApp` (메뉴 막대 앱)
 
 ## 명령
 ```sh
 swift build                          # 빌드
 swift test                           # 자동 테스트 (RouteCoreTests)
 swift run soundlanes devices         # 실행 예
+scripts/bundle-app.sh [debug|release]   # build/SoundLanes.app 생성 + 개발 인증서 서명
+open build/SoundLanes.app            # 앱 실행 (반드시 open으로: 권한이 앱에 귀속됨)
+open -n build/SoundLanes.app --args --capture-menu /tmp/menu.png   # 메뉴 화면을 PNG로 저장 후 종료 (UI 확인용)
 /usr/bin/log stream --predicate 'subsystem == "com.zinu.soundlanes"' --level info   # 로그 확인 (zsh 내장 `log`와 겹치므로 전체 경로)
 ```
 
@@ -34,6 +38,9 @@ swift run soundlanes devices         # 실행 예
 ## 코드 규칙
 - Swift 6 strict concurrency 활성화. 경고 없이 빌드되게 유지한다.
 - Core Audio의 C API는 `AudioObject.swift`의 래퍼를 통해서만 부른다. 다른 파일에서 `AudioObjectGetPropertyData`를 직접 부르지 않는다.
+- 앱 종료 처리: `terminate:`는 메인 큐 블록 안에서도 불린다. `applicationShouldTerminate`에서 MainActor 작업을 기다리면 교착된다.
+  정리는 `AppModel.detachForShutdown()`으로 MainActor 밖에서 하고, `reply`는 `CFRunLoopPerformBlock`으로 보낸다.
+- 화면 전체를 캡처하지 않는다 (사용자 화면에 개인 내용이 있을 수 있다). UI 확인은 `--capture-menu`로 앱 창만 그린다.
 - `RouteEngine`은 `AudioSystem` 프로토콜에만 의존한다. 테스트는 가짜 구현으로 하고, 실제 오디오 장치가 필요한 테스트는 만들지 않는다.
 - 사용자 메시지(CLI 출력, 오류)는 한국어, 코드·식별자·로그는 영어.
 - 외부 의존성은 `swift-argument-parser`만 허용한다. 추가가 필요하면 먼저 사용자에게 묻는다.

@@ -13,15 +13,18 @@ public struct AudioProcess: Hashable, Sendable {
     public let appName: String
     /// Bundle ID of that outermost `.app`, so a helper can be traced back to the app the user knows.
     public let appBundleID: String
+    /// The executable lives inside an `.app` bundle (false for daemons and XPC services).
+    public let isApp: Bool
 
     public init(object: AudioObject, pid: pid_t, bundleID: String, isRunningOutput: Bool,
-                appName: String, appBundleID: String) {
+                appName: String, appBundleID: String, isApp: Bool = true) {
         self.object = object
         self.pid = pid
         self.bundleID = bundleID
         self.isRunningOutput = isRunningOutput
         self.appName = appName
         self.appBundleID = appBundleID
+        self.isApp = isApp
     }
 }
 
@@ -40,7 +43,7 @@ public enum ProcessCatalog {
             result.append(AudioProcess(
                 object: object, pid: pid, bundleID: bundleID, isRunningOutput: running,
                 appName: app?.name ?? executableName(of: pid) ?? bundleID,
-                appBundleID: app?.bundleID ?? bundleID))
+                appBundleID: app?.bundleID ?? bundleID, isApp: app != nil))
         }
         return result
     }

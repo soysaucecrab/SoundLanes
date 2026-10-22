@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "soundlanes", targets: ["soundlanes"]),
+        .executable(name: "SoundLanesApp", targets: ["SoundLanesApp"]),
         .library(name: "RouteCore", targets: ["RouteCore"]),
     ],
     dependencies: [
@@ -29,6 +30,8 @@ let package = Package(
                 ]),
             ]
         ),
+        // Menu bar app. Bundled and signed by scripts/bundle-app.sh (Info.plist lives in the bundle).
+        .executableTarget(name: "SoundLanesApp", dependencies: ["RouteCore"]),
         .testTarget(name: "RouteCoreTests", dependencies: ["RouteCore"]),
     ]
 )

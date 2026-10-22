@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.zinu.soundlanes</string>
+	<string>com.zinu.soundlanes.cli</string>
 	<key>CFBundleName</key>
 	<string>SoundLanes</string>
 	<key>CFBundleShortVersionString</key>

@@ -8,7 +8,7 @@ struct SoundLanes: AsyncParsableCommand {
         commandName: "soundlanes",
         abstract: "앱별로 오디오 출력 장치를 지정합니다.",
         version: "0.1.0",
-        subcommands: [Devices.self, Apps.self, Once.self]
+        subcommands: [Devices.self, Apps.self, Add.self, Remove.self, List.self, Run.self, Status.self, Once.self]
     )
 
     /// Custom entry point so exit codes follow SPEC §9 (`2` for bad arguments instead of 64)
@@ -28,6 +28,12 @@ struct SoundLanes: AsyncParsableCommand {
             printError(error.description)
             Foundation.exit(ExitStatus.general)
         } catch let error as RouteError {
+            printError(error.description)
+            Foundation.exit(ExitStatus.general)
+        } catch let error as ConfigError {
+            printError(error.description)
+            Foundation.exit(ExitStatus.general)
+        } catch let error as ControlError {
             printError(error.description)
             Foundation.exit(ExitStatus.general)
         } catch {
