@@ -4,8 +4,8 @@
 예: Music → 내장 스피커, Chrome → AirPods. **전체 요구사항과 설계는 `SPEC.md`가 기준이다.** 구현 전에 반드시 읽는다.
 
 ## 현재 상태
-- M1~M3 구현 완료: CLI 전체 명령, `RouteEngine`, 메뉴 막대 앱. **실제 청취 검증(SPEC §14, §12.2)은 아직이다.**
-- 남은 일: §14 미확인 항목 청취 검증, M4의 공증(Developer ID 인증서 필요).
+- v1 완성: CLI 전체 명령, `RouteEngine`, 메뉴 막대 앱. S1~S6 청취·측정 확인 완료 (SPEC §14).
+- 지금은 이 맥 전용. 다른 맥 배포는 Developer ID 발급 후 `scripts/notarize.sh` (SPEC §11 M4).
 - M0 결과(§13 미결정 사항)는 코드보다 먼저 `SPEC.md`에 반영한다.
 
 ## 환경

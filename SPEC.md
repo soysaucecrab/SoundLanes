@@ -1,7 +1,7 @@
 # SoundLanes — 앱별 오디오 출력 라우팅 명세서
 
 - 작성일: 2026-10-22
-- 상태: M3 메뉴 막대 앱 구현 완료, 실제 청취 검증 대기 (§14)
+- 상태: v1 완성 (M0~M3 완료, M4는 이 맥 전용 범위로 완료). 공증·배포는 Developer ID 발급 후 (§11)
 - 대상 환경: macOS 15.0 이상 (개발 기준: macOS 27.0.1, Apple Silicon M5, Swift 6.4)
   - Process Tap API는 14.2부터 있지만, IOProc 공유 값에 쓰는 `Synchronization.Atomic`이 15.0부터라 최소 버전을 15.0으로 정했다 (2026-10-22).
 
@@ -275,8 +275,8 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 
 | 단계 | 상태 (2026-10-23) |
 |---|---|
-| M0 | 진행 중: 생성·정리·권한·탭 갱신 확인. 청취로만 알 수 있는 항목 대기 (§14) |
-| M1, M2 | 구현 완료, 자동 테스트 통과. S1·S3는 측정으로 확인, S2·S4·S5와 청취 확인 대기 |
+| M0 | 완료. 샘플레이트 불일치(§13-2)만 미확인 (§14) |
+| M1, M2 | 완료. S1~S6 통과 (청취·측정·자동 테스트, §14) |
 | M3 | 구현 완료: 메뉴 막대 앱, 앱별 장치·볼륨, 로그인 시 실행 |
 | M4 | 앱 아이콘·오류 알림 완료. 지금은 이 맥 전용으로 쓴다(2026-10-23 결정). 공증은 Developer ID를 받은 뒤 `scripts/notarize.sh`로 한다 |
 
@@ -317,11 +317,11 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 ---
 
 ## 13. 미결정 사항 (Open Questions)
-1. 헬퍼 프로세스 매칭: 번들 ID 접두사로 충분한가, responsible process 매칭이 필요한가?
+1. ~~헬퍼 프로세스 매칭~~ → 번들 ID 접두사로 충분함 (Chrome 확인, §14)
 2. 샘플레이트 불일치 시 aggregate 자동 변환 여부 (§7)
-3. AirPods가 aggregate 안에서 고음질(A2DP/AAC) 출력을 유지하는가 (§6)
-4. 실행 중인 탭의 대상 프로세스 목록을 갱신할 수 있는가, 재생성해야 하는가 (§4.3)
-5. CLI 실행 시 TCC 권한 귀속 대상과, 메뉴 막대 앱으로의 권한 이전 방식 (§3.4)
+3. ~~AirPods 고음질 유지~~ → 마이크 스트림을 끈 구성에서 유지됨 (§14)
+4. ~~탭 대상 갱신~~ → macOS 27.0.1에서 실행 중 갱신 가능. 거부 시 재생성 경로 유지 (§14)
+5. ~~CLI TCC 귀속~~ → 터미널 앱에 귀속. 앱 번들은 자기 권한을 받으므로 일상 사용은 앱으로 (§3.4)
 6. ~~배포 이름 확정~~ → **SoundLanes** (CLI `soundlanes`, 번들 ID `com.zinu.soundlanes`)로 확정
 7. CLI가 터미널 앱 대신 자기 자신으로 TCC 권한을 받게 할지. 방법은 `responsibility_spawnattrs_setdisclaim`(비공개 API)으로 자기 자신을 다시 실행하거나,
    CLI를 `.app` 번들에 넣는 것. 결정 전까지는 터미널 앱에 권한을 주는 방식으로 쓴다 (§3.4).
@@ -340,17 +340,26 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 | 1 | 탭 → aggregate → IOProc → start 생성과 역순 정리 | 확인 | HDMI 장치, Background Music 가상 장치에서 생성·SIGINT 정리 성공. 정리 후 남은 aggregate 없음 |
 | 2 | CLI의 TCC 권한 귀속 (§13-5) | 확인 | 터미널 앱에 귀속. 사용 설명 문자열이 없는 터미널은 창 없이 거부 (§3.4) |
 | 3 | 앱 번들의 권한 | 확인 | `SoundLanes.app`이 자기 이름으로 권한 창을 띄움. 허용 후 Music → 내장 스피커에서 IO 약 95주기/초, 탭 신호 수신, 탭 버퍼 누락 0. 실제로 들리는지는 미확인 |
-| 4 | 헬퍼 매칭 (§13-1) | 일부 | Chrome 오디오 프로세스가 `com.google.Chrome`, `com.google.Chrome.helper`로 보임 → 접두사 규칙과 맞음. 실제 재생 라우팅은 미확인 |
+| 4 | 헬퍼 매칭 (§13-1) | 확인 | Chrome(YouTube) 소리가 `com.google.Chrome.helper`에서 나고, 번들 ID 접두사 규칙으로 라우팅됨 (청취 확인). responsible process 매칭은 필요 없음 |
 | 5 | aggregate 입력 스트림 순서 (장치 입력 다음에 탭) | 미확인 | 구현은 이 순서를 가정하고 앞쪽 장치 입력 스트림을 끈다. 틀리면 `--meter`에 "탭 버퍼 없음"이 늘어난다 |
-| 6 | AirPods 고음질 유지 (§13-3) | 미확인 | 장치 입력 스트림을 IOProc 사용 목록에서 끄는 방식으로 구현. 시작 2초 뒤 샘플레이트가 떨어지면 경고 |
+| 6 | AirPods 고음질 유지 (§13-3) | 확인 | 장치 입력(마이크) 스트림을 IOProc 사용 목록에서 끈 구성에서 AirPods 음질 정상 (청취 확인) |
 | 7 | 샘플레이트 불일치 자동 변환 (§13-2) | 미확인 | |
 | 8 | 실행 중 탭 대상 프로세스 갱신 (§13-4) | 확인 | `kAudioTapPropertyDescription` 쓰기가 받아들여짐 (로그 `tap … updated in place`). 갱신 후 새 프로세스의 소리가 같은 레벨로 탭에 들어오고 IO 주기도 끊기지 않음. 거부되면 재생성하는 경로는 유지 |
 | 10 | 앱 소리가 탭을 거쳐 지정 장치까지 가는지 (S1, 측정) | 확인 | `Tools/RouteCheck/run.sh`: −60 dBFS 톤을 내는 테스트 프로세스를 기본 출력(AirPods)이 아닌 내장 스피커로 라우팅. 탭 입력 −60.0 dBFS(재생 진폭과 일치), 스피커 IO 약 95주기/초 |
 | 11 | 프로세스 재실행 시 자동 재적용 (S3, 측정) | 확인 | 같은 도구로 프로세스를 다시 실행하면 같은 레벨로 다시 측정되고, 종료 후에는 "재생 대기"로 돌아가 라우트가 정리됨 |
-| 9 | `kill -9` 복구 (S4) | 미확인 | |
+| 9 | `kill -9` 복구 (S4) | 확인 | 라우팅 중 `pkill -9 SoundLanes` → Chrome 소리가 바로 기본 출력으로 돌아옴 (청취 확인) |
 
-측정으로 확인할 수 없는 것: 실제로 귀에 들리는 위치, 원래 출력이 음소거되는지(G2), `kill -9` 후 복귀(S4), AirPods 음질.
-이 항목은 사용자가 직접 들어 봐야 한다 (§12.2).
+### 청취 확인 (2026-10-23, 사용자, 앱 `/Applications/SoundLanes.app`, 기본 출력 AirPods Pro)
+| 시나리오 | 결과 |
+|---|---|
+| S1 + G2: Chrome(YouTube) → MacBook 스피커 | 통과. 스피커에서만 들림, AirPods에서는 안 들림, 음질 정상 |
+| S5: 라우팅 중 기본 출력 변경 | 통과. Chrome은 지정 장치에 남고 다른 앱만 따라감 |
+| S2: Chrome → AirPods, AirPods 뺐다 끼우기 | 통과. 빼면 스피커로, 끼우면 AirPods로 자동 복귀. 음질 정상 |
+| S4: 라우팅 중 `kill -9` | 통과. 바로 기본 출력으로 돌아옴 |
+| S3 | 측정으로 확인 (항목 11) |
+| S6 | 실제 장치에서 "기본 출력과 같음"으로 탭을 만들지 않는 것 확인 (M1 probe 로그), 자동 테스트 통과 |
+
+남은 미확인: 샘플레이트 불일치 자동 변환(항목 7), "시스템 오디오 녹음만"에 터미널 추가(항목 3의 CLI 우회). 둘 다 앱 사용에는 영향 없다.
 
 Background Music 드라이버는 BGMApp 없이는 루프백이 동작하지 않는다 (출력 중에는 입력 IO가 돌지 않고, 쉬는 중에는 0만 나옴).
 그래서 루프백 녹음 대신 앱이 직접 잰 탭 입력 레벨과 IO 주기(`soundlanes status`)를 근거로 쓴다.
