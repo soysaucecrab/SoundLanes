@@ -9,6 +9,14 @@ public struct DeviceRef: Codable, Hashable, Sendable {
         self.uid = uid
         self.name = name
     }
+
+    /// Follow the system default output. Used to apply a per-app volume without moving the app (SPEC §8.1).
+    public static let followDefault = DeviceRef(uid: "", name: "")
+
+    public var isFollowDefault: Bool { uid == DeviceRef.followDefault.uid }
+
+    /// Name for UI and CLI output.
+    public var displayName: String { isFollowDefault ? "기본 출력" : name }
 }
 
 /// One saved route: an app (and its helpers) → a device (SPEC §8).

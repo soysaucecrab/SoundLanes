@@ -32,13 +32,13 @@ public enum AppMatcher {
 /// What a single route should look like given the current hardware state.
 public enum RoutePlan: Equatable, Sendable {
     case inactive(InactiveReason)
-    /// Tap exactly these process objects, sorted.
-    case active(processes: [AudioObject])
+    /// Tap exactly these process objects, sorted, and play them on `deviceUID`.
+    case active(processes: [AudioObject], deviceUID: String)
 
     public enum InactiveReason: Equatable, Sendable {
         /// Target device is not connected (SPEC §6, S2).
         case deviceMissing
-        /// Target device is already the default output, so no tap is needed (S6).
+        /// Target device is already the default output and the volume is 100%, so no tap is needed (S6).
         case deviceIsDefault
         /// No running process matches the rule.
         case noProcesses
@@ -46,17 +46,21 @@ public enum RoutePlan: Equatable, Sendable {
 }
 
 public enum RoutePlanner {
+    /// - Parameter deviceUID: target device, or `DeviceRef.followDefault.uid` for the current default output.
+    /// - Parameter volume: a tap is still needed on the default output when the app's volume is below 100%.
     public static func plan(
         rule: AppRule,
         deviceUID: String,
+        volume: Float = 1,
         availableDeviceUIDs: Set<String>,
         defaultOutputUID: String?,
         processes: [AudioProcess]
     ) -> RoutePlan {
-        guard availableDeviceUIDs.contains(deviceUID) else { return .inactive(.deviceMissing) }
-        if defaultOutputUID == deviceUID { return .inactive(.deviceIsDefault) }
+        let target = deviceUID == DeviceRef.followDefault.uid ? defaultOutputUID : deviceUID
+        guard let target, availableDeviceUIDs.contains(target) else { return .inactive(.deviceMissing) }
+        if target == defaultOutputUID, volume >= 1 { return .inactive(.deviceIsDefault) }
         let matched = AppMatcher.select(rule, from: processes).map(\.object).sorted { $0.id < $1.id }
-        return matched.isEmpty ? .inactive(.noProcesses) : .active(processes: matched)
+        return matched.isEmpty ? .inactive(.noProcesses) : .active(processes: matched, deviceUID: target)
     }
 }
 

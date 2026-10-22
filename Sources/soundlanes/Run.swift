@@ -37,7 +37,7 @@ struct Run: AsyncParsableCommand {
         let printer = Task {
             for await event in engine.events {
                 let rule = await book.rule(event.ruleID)
-                print(describe(event.kind, deviceName: rule?.device.name ?? "?", appLabel: rule?.app.bundleID))
+                print(describe(event.kind, deviceName: rule?.device.displayName ?? "?", appLabel: rule?.app.bundleID))
             }
         }
 
@@ -95,7 +95,7 @@ struct Status: ParsableCommand {
         }
         var table = Table("앱", "장치", "상태", "프로세스", "추가 지연", "입력 레벨", "IO 주기", "메시지")
         for route in routes {
-            table.add(route.bundleID, route.device.name, route.phase.label, String(route.processCount),
+            table.add(route.bundleID, route.device.displayName, route.phase.label, String(route.processCount),
                       route.extraLatencyMilliseconds.map { String(format: "%+.0f ms", $0) } ?? "",
                       route.inputPeak.map { $0 > 0 ? String(format: "%.1f dBFS", 20 * log10($0)) : "무음" } ?? "",
                       route.ioCycles.map(String.init) ?? "",

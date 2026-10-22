@@ -123,11 +123,16 @@ public actor RouteEngine {
         reconcile()
     }
 
-    /// Changes one rule's gain on the running route without a reconcile (for live slider updates).
+    /// Changes one rule's gain. Updates the running route directly (for live slider updates);
+    /// reconciles when the change may start or stop a tap (volume below/at 100% on the default output).
     public func setVolume(_ volume: Float, for ruleID: UUID) {
         guard let index = rules.firstIndex(where: { $0.id == ruleID }) else { return }
         rules[index].volume = volume
-        slots[ruleID]?.route?.volume = volume
+        if let route = slots[ruleID]?.route, volume < 1 {
+            route.volume = volume
+        } else {
+            reconcile()
+        }
     }
 
     public func takeReading(for ruleID: UUID) -> MeterReading? {
@@ -148,7 +153,7 @@ public actor RouteEngine {
             }
             var extraLatency: Double?
             if phase == .running, let defaultLatency,
-               let device = lastState?.devices.first(where: { $0.uid == rule.device.uid }) {
+               let device = lastState?.devices.first(where: { $0.uid == slot?.route?.deviceUID }) {
                 extraLatency = device.latencyMilliseconds - defaultLatency
             }
             return RouteStatus(
@@ -206,11 +211,8 @@ public actor RouteEngine {
             setInactive(.disabled, rule: rule, slot: &slot)
             return
         }
-        if let route = slot.route, route.deviceUID != rule.device.uid {
-            tearDown(&slot)
-        }
         let plan = RoutePlanner.plan(
-            rule: rule.app, deviceUID: rule.device.uid,
+            rule: rule.app, deviceUID: rule.device.uid, volume: rule.volume,
             availableDeviceUIDs: Set(state.devices.map(\.uid)),
             defaultOutputUID: state.defaultOutput?.uid,
             processes: state.processes)
@@ -225,7 +227,9 @@ public actor RouteEngine {
             }
             setInactive(phase, rule: rule, slot: &slot)
 
-        case .active(let objects):
+        case .active(let objects, let targetUID):
+            // The rule moved to another device, or the default output it follows changed.
+            if let route = slot.route, route.deviceUID != targetUID { tearDown(&slot) }
             let matched = AppMatcher.select(rule.app, from: state.processes)
             if let route = slot.route {
                 if route.volume != rule.volume { route.volume = rule.volume }
@@ -237,14 +241,14 @@ public actor RouteEngine {
                 } catch {
                     log.notice("in-place tap update refused, recreating: \(String(describing: error), privacy: .public)")
                     tearDown(&slot)
-                    if start(rule, objects: objects, matched: matched, state: state, slot: &slot) {
+                    if start(rule, deviceUID: targetUID, objects: objects, matched: matched, state: state, slot: &slot) {
                         continuation.yield(Event(ruleID: rule.id, kind: .updated(
                             processes: matched, method: .recreated(updateError: String(describing: error)))))
                     }
                 }
             } else {
                 if let retryAt = slot.retryAt, ContinuousClock.now < retryAt { return }
-                if start(rule, objects: objects, matched: matched, state: state, slot: &slot) {
+                if start(rule, deviceUID: targetUID, objects: objects, matched: matched, state: state, slot: &slot) {
                     continuation.yield(Event(ruleID: rule.id, kind: .started(
                         processes: matched, diagnostics: slot.route?.diagnostics)))
                 }
@@ -252,9 +256,9 @@ public actor RouteEngine {
         }
     }
 
-    private func start(_ rule: RouteRule, objects: [AudioObject], matched: [AudioProcess],
+    private func start(_ rule: RouteRule, deviceUID: String, objects: [AudioObject], matched: [AudioProcess],
                        state: HardwareState, slot: inout Slot) -> Bool {
-        guard let device = state.devices.first(where: { $0.uid == rule.device.uid }) else { return false }
+        guard let device = state.devices.first(where: { $0.uid == deviceUID }) else { return false }
         let appName = matched.first(where: { $0.appBundleID.caseInsensitiveCompare(rule.app.bundleID) == .orderedSame })?.appName
             ?? rule.app.bundleID
         do {

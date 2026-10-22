@@ -184,6 +184,34 @@ private func standardState() -> HardwareState {
         #expect(system.live[0].volume == 0.25)
     }
 
+    @Test func followDefaultWithVolumeTracksDefaultOutput() async throws {
+        var rule = chromeToAirPods
+        rule.device = .followDefault
+        rule.volume = 0.5
+        let system = FakeSystem(state: standardState())
+        let engine = try await makeEngine(system, rules: [rule])
+        #expect(system.live.map(\.deviceUID) == ["speaker"])
+
+        system.state.devices = [device("speaker"), device("airpods", isDefault: true)]
+        await engine.reconcile()
+        #expect(system.live.map(\.deviceUID) == ["airpods"])
+        #expect(system.live[0].volume == 0.5)
+    }
+
+    @Test func volumeBackToFullOnDefaultRemovesTap() async throws {
+        var rule = chromeToAirPods
+        rule.device = .followDefault
+        rule.volume = 0.5
+        let system = FakeSystem(state: standardState())
+        let engine = try await makeEngine(system, rules: [rule])
+        #expect(system.live.count == 1)
+        await engine.setVolume(1, for: rule.id)
+        #expect(system.live.isEmpty)
+        #expect(await engine.status().first?.phase == .deviceIsDefault)
+        await engine.setVolume(0.7, for: rule.id)
+        #expect(system.live.map(\.volume) == [0.7])
+    }
+
     @Test func failureBacksOffAndKeepsOtherRules() async throws {
         let system = FakeSystem(state: standardState())
         system.failCreation = true

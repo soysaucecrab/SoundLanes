@@ -52,7 +52,7 @@ private func process(_ id: UInt32, _ bundleID: String, app: String = "App", appB
     @Test func activeWithSortedMatches() {
         let plan = RoutePlanner.plan(rule: rule, deviceUID: "airpods", availableDeviceUIDs: ["airpods", "speaker"],
                                      defaultOutputUID: "speaker", processes: processes)
-        #expect(plan == .active(processes: [AudioObject(3), AudioObject(7)]))
+        #expect(plan == .active(processes: [AudioObject(3), AudioObject(7)], deviceUID: "airpods"))
     }
 
     @Test func deviceDisconnectedDeactivates() {  // S2
@@ -65,6 +65,21 @@ private func process(_ id: UInt32, _ bundleID: String, app: String = "App", appB
         let plan = RoutePlanner.plan(rule: rule, deviceUID: "airpods", availableDeviceUIDs: ["airpods", "speaker"],
                                      defaultOutputUID: "airpods", processes: processes)
         #expect(plan == .inactive(.deviceIsDefault))
+    }
+
+    @Test func reducedVolumeOnDefaultOutputStillTaps() {
+        let plan = RoutePlanner.plan(rule: rule, deviceUID: "airpods", volume: 0.5, availableDeviceUIDs: ["airpods"],
+                                     defaultOutputUID: "airpods", processes: processes)
+        #expect(plan == .active(processes: [AudioObject(3), AudioObject(7)], deviceUID: "airpods"))
+    }
+
+    @Test func followDefaultTargetsCurrentDefault() {
+        let full = RoutePlanner.plan(rule: rule, deviceUID: DeviceRef.followDefault.uid, availableDeviceUIDs: ["speaker"],
+                                     defaultOutputUID: "speaker", processes: processes)
+        #expect(full == .inactive(.deviceIsDefault))
+        let quieter = RoutePlanner.plan(rule: rule, deviceUID: DeviceRef.followDefault.uid, volume: 0.3,
+                                        availableDeviceUIDs: ["speaker"], defaultOutputUID: "speaker", processes: processes)
+        #expect(quieter == .active(processes: [AudioObject(3), AudioObject(7)], deviceUID: "speaker"))
     }
 
     @Test func noMatchingProcesses() {

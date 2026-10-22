@@ -42,6 +42,10 @@ final class AppModel {
     private static let ownerName = "SoundLanes 앱"
 
     var isRouting: Bool { statuses.values.contains { $0.phase == .running } }
+    var runningCount: Int { statuses.values.filter { $0.phase == .running }.count }
+    var defaultDevice: OutputDevice? { devices.first(where: \.isDefault) }
+
+    func device(uid: String) -> OutputDevice? { devices.first { $0.uid == uid } }
     var needsPermission: Bool { statuses.values.contains { $0.phase == .noPermission } }
 
     // MARK: Lifecycle
@@ -186,6 +190,10 @@ final class AppModel {
             rule.device = DeviceRef(uid: uid, name: name)
             rule.enabled = true
             updated.upsert(rule)
+        } else if var rule = rule(for: item), rule.volume < 1 {
+            // Keep the reduced volume on the default output.
+            rule.device = .followDefault
+            updated.upsert(rule)
         } else {
             updated.remove(bundleID: item.bundleID)
         }
@@ -193,9 +201,27 @@ final class AppModel {
     }
 
     /// Live gain change while dragging; `commit` saves to disk when the drag ends.
+    /// An app on the default output gets a "follow default" rule so its volume can be applied.
     func setVolume(_ volume: Float, for item: AppItem, commit: Bool) {
-        guard var rule = rule(for: item) else { return }
+        let volume = volume >= 0.995 ? 1 : volume
+        guard var rule = rule(for: item) else {
+            guard volume < 1 else { return }
+            config.upsert(RouteRule(
+                app: AppRule(bundleID: item.bundleID, extraBundleIDs: AppPresets.defaultExtraBundleIDs(for: item.bundleID)),
+                device: .followDefault, volume: volume))
+            let routes = config.routes
+            Task { await engine?.setRules(routes) }
+            if commit { save(config) }
+            return
+        }
         rule.volume = volume
+        if commit, rule.device.isFollowDefault, volume >= 1 {
+            // Back to 100% on the default output: nothing left to do for this app.
+            var updated = config
+            updated.remove(bundleID: item.bundleID)
+            apply(updated)
+            return
+        }
         config.upsert(rule)
         Task { await engine?.setVolume(volume, for: rule.id) }
         if commit { save(config) }
