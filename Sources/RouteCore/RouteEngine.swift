@@ -41,6 +41,22 @@ public struct RouteStatus: Codable, Hashable, Sendable, Identifiable {
     /// IOProc cycles and cycles without tap data since the route started. Nil when not routing.
     public var ioCycles: UInt64?
     public var missingInputCycles: UInt64?
+
+    public init(id: UUID, bundleID: String, device: DeviceRef, volume: Float, phase: Phase, processCount: Int,
+                message: String?, extraLatencyMilliseconds: Double?, inputPeak: Float?, ioCycles: UInt64?,
+                missingInputCycles: UInt64?) {
+        self.id = id
+        self.bundleID = bundleID
+        self.device = device
+        self.volume = volume
+        self.phase = phase
+        self.processCount = processCount
+        self.message = message
+        self.extraLatencyMilliseconds = extraLatencyMilliseconds
+        self.inputPeak = inputPeak
+        self.ioCycles = ioCycles
+        self.missingInputCycles = missingInputCycles
+    }
 }
 
 /// Keeps the set of running routes in line with the rules and the hardware (SPEC §4.2).

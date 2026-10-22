@@ -28,6 +28,8 @@ final class AppModel {
     private(set) var devices: [OutputDevice] = []
     private(set) var statuses: [UUID: RouteStatus] = [:]
     private var processes: [AudioProcess] = []
+    /// Showing made-up apps and devices for screenshots; nothing is routed.
+    private(set) var isDemo = false
     var showAllApps = false
     var lastError: String?
 
@@ -89,6 +91,15 @@ final class AppModel {
         }
     }
 
+    func applyDemo(devices: [OutputDevice], processes: [AudioProcess], config: RouteConfig, statuses: [RouteStatus]) {
+        isDemo = true
+        mode = .active
+        self.devices = devices
+        self.processes = processes
+        self.config = config
+        self.statuses = Dictionary(uniqueKeysWithValues: statuses.map { ($0.id, $0) })
+    }
+
     /// Tries again after another runner has quit.
     func retry() async {
         mode = .starting
@@ -114,6 +125,7 @@ final class AppModel {
 
     /// Re-reads devices, processes and route status. Core Audio is queried off the main thread.
     func refresh() async {
+        guard !isDemo else { return }
         let state = await Task.detached { [system] in try? system.currentState() }.value
         if let state {
             devices = state.devices.sorted { ($0.isDefault ? 0 : 1, $0.name) < ($1.isDefault ? 0 : 1, $1.name) }

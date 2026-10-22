@@ -1,58 +1,122 @@
 # SoundLanes
 
-앱마다 오디오 출력 장치를 따로 지정하는 macOS 메뉴 막대 앱입니다.
-예를 들어 Music은 MacBook 스피커로, Chrome(YouTube)은 AirPods로 보낼 수 있습니다.
+![macOS 15+](https://img.shields.io/badge/macOS-15%2B-lightgrey)
+![Swift 6](https://img.shields.io/badge/Swift-6-orange)
 
-- 드라이버나 커널 확장을 설치하지 않습니다. macOS의 Core Audio Process Tap API만 사용합니다.
-- 라우팅한 앱의 소리는 원래 출력에서 나지 않습니다(이중 재생 없음).
-- SoundLanes가 종료되거나 강제 종료돼도 소리는 원래 기본 출력으로 돌아옵니다.
-- 장치를 연결·해제하거나 앱을 다시 실행하면 자동으로 따라갑니다.
+Send each app's sound to a different output. Music on the MacBook speakers, a YouTube tab in your AirPods, Slack a bit quieter than everything else.
 
-요구 사항: macOS 15 이상, Swift 6 툴체인 (Xcode 16 이상)
+macOS only has one output for everything. SoundLanes sits in the menu bar and lets you pick a device per app. No audio driver is installed: it uses the Core Audio process taps that came with macOS 14.2, so if SoundLanes quits or crashes, sound goes straight back to where it was.
 
-## 설치
+<img src="docs/media/menu.png" width="380" alt="SoundLanes menu: Chrome to AirPods Pro, Music to Studio Display, Slack at 35% on the default output, Podcasts playing">
+
+The interface is in Korean.
+
+## Requirements
+
+- macOS 15 Sequoia or later (built and tested on Apple Silicon)
+- Xcode 16 or the Command Line Tools to build it
+
+## Install
+
+There's no prebuilt download yet, so build it:
 
 ```sh
-scripts/bundle-app.sh release          # build/SoundLanes.app 생성
+git clone https://github.com/soysaucecrab/SoundLanes.git
+cd SoundLanes
+scripts/bundle-app.sh release
 cp -R build/SoundLanes.app /Applications/
 open /Applications/SoundLanes.app
 ```
 
-처음 라우팅할 때 **시스템 오디오 접근 권한** 창이 뜹니다. 허용해야 동작합니다.
-AirPods처럼 마이크가 달린 장치로 보낼 때는 마이크 권한 창이 뜰 수도 있습니다. SoundLanes는 마이크 소리를 쓰지 않습니다.
+`bundle-app.sh` signs the app with your Apple Development certificate if you have one, otherwise ad-hoc. With an ad-hoc signature macOS may ask for permission again after every rebuild.
 
-## 사용
+The first time an app is routed, macOS asks whether SoundLanes can record system audio. It needs this to take the app's sound and play it somewhere else. If you route to AirPods or anything else with a microphone, macOS may also ask about the microphone; SoundLanes never reads it.
 
-메뉴 막대의 스피커 아이콘을 누르면 지금 소리를 내는 앱 목록이 나옵니다.
-앱 옆에서 출력 장치를 고르면 바로 적용되고, 볼륨 슬라이더로 앱별 음량을 조절할 수 있습니다.
-"기본 출력 따름"을 고르면 원래대로 돌아갑니다. "로그인 시 실행"을 켜면 로그인할 때 자동으로 시작합니다.
+## Features
 
-알려진 한계:
-- 영상 앱을 지연이 큰 장치(AirPods 등)로 보내면 소리가 영상보다 늦을 수 있습니다. 이럴 때는 AirPods를 기본 출력으로 두고 음악 앱을 스피커로 보내는 편이 낫습니다.
-- Safari는 공용 WebKit 프로세스로 소리를 내므로 다른 WebKit 앱의 소리도 함께 라우팅될 수 있습니다.
+- Pick an output device for any app that plays sound, right from the menu bar
+- Volume per app, including apps that stay on the default output
+- Helper processes are included. Chrome and Electron apps (Slack, Discord, …) make their sound in helpers, and those move with the app. Safari plays through a shared WebKit process and is routed with it
+- Follows your devices: take the AirPods out and the app falls back to the default output, put them back in and it moves back. Relaunched apps get their device again
+- Apps you've sent to a specific device stay there when you change the system output
+- A level meter per routed app, and a hint when the target device has noticeably more latency than the default
+- Notifications when a route fails or permission is missing
+- Open at login
+- A command line tool for the same settings
 
-## 명령줄 도구
+## Usage
+
+Click the speaker icon in the menu bar. Apps that are playing show up in the list, and each has a device menu and a volume slider. Choosing a device takes effect right away; **기본 출력** (default output) puts the app back. Apps you've set stay at the top, and **소리를 내지 않는 앱 보기** shows the ones that are open but quiet.
+
+Settings live in `~/Library/Application Support/SoundLanes/routes.json`.
+
+### Command line
 
 ```sh
 swift build
-.build/debug/soundlanes devices                    # 출력 장치 목록
-.build/debug/soundlanes apps [--all]               # 오디오를 쓰는 앱 목록
-.build/debug/soundlanes add Chrome AirPods --volume 0.8
-.build/debug/soundlanes list | remove Chrome | status
-.build/debug/soundlanes run                        # 앱 없이 규칙 적용 (앱과 동시에 실행 불가)
+.build/debug/soundlanes devices                       # output devices
+.build/debug/soundlanes apps --all                    # apps that use audio
+.build/debug/soundlanes add Chrome AirPods            # route Chrome to AirPods
+.build/debug/soundlanes add Slack default --volume 0.4
+.build/debug/soundlanes list
+.build/debug/soundlanes remove Chrome
+.build/debug/soundlanes status                        # what the running app is doing
 ```
 
-CLI와 앱은 같은 설정 파일(`~/Library/Application Support/SoundLanes/routes.json`)을 씁니다.
-앱이 실행 중이면 `add`/`remove`가 앱에 바로 적용됩니다.
-터미널에서 `run`이나 `once`를 쓰면 오디오 권한이 터미널 앱에 귀속되므로, 일상 사용은 앱을 권장합니다.
+`add` and `remove` apply immediately when the app is running. Without the app, `soundlanes run` applies the rules in the foreground (only one of the two can run at a time).
 
-## 개발
+## How it works
 
-설계와 요구사항은 [SPEC.md](SPEC.md), 작업 규칙은 [CLAUDE.md](CLAUDE.md)를 봅니다.
+```
+Chrome ──(process tap, muted while tapped)──▶ private aggregate device { AirPods + tap } ──▶ AirPods
+Chrome's normal output ──▶ default output   (silent while the tap is being read)
+```
+
+For every routed app, SoundLanes creates a process tap on the app and its helpers, a private aggregate device with the target output and that tap, and an IO callback that copies the tap into the output with the app's volume. The tap only mutes the app while someone is reading it, which is why sound comes back on its own when SoundLanes stops, even after `kill -9`.
+
+## FAQ
+
+### Nothing changes when I pick a device
+
+Check **System Settings → Privacy & Security → Screen & System Audio Recording** and make sure SoundLanes is allowed. The menu also shows a warning when the permission is missing. If SoundLanes isn't listed, reset it and open the app again:
 
 ```sh
-swift test                 # 자동 테스트
-/usr/bin/log stream --predicate 'subsystem == "com.zinu.soundlanes"' --level info
+tccutil reset AudioCapture com.zinu.soundlanes
 ```
 
-"SoundSource"는 Rogue Amoeba의 상용 제품명이며 이 프로젝트와 관계가 없습니다.
+### Video is out of sync in my AirPods
+
+The video player thinks it's playing on the default output and times the picture for that device, but the sound actually goes to the AirPods, which are slower. There's no way to delay someone else's video. If it bothers you, do it the other way around: make the AirPods the default output and send your music app to the speakers.
+
+### Routing Safari also moves another app
+
+Safari and other apps built on WebKit share one audio process, so they move together.
+
+### People on a call hear an echo
+
+Call apps cancel echo based on the device they think they're playing on. Leave Zoom, FaceTime and similar apps on the default output.
+
+### How do I uninstall it?
+
+Quit SoundLanes from its menu and delete it from `/Applications`. To remove its settings and permission too:
+
+```sh
+rm -r ~/Library/Application\ Support/SoundLanes
+tccutil reset AudioCapture com.zinu.soundlanes
+```
+
+## Building
+
+There are no dependencies other than [swift-argument-parser](https://github.com/apple/swift-argument-parser) for the CLI.
+
+```sh
+swift build
+swift test
+scripts/bundle-app.sh debug                                     # build/SoundLanes.app
+open -n build/SoundLanes.app --args --demo --capture-menu /tmp/menu.png   # the screenshot above
+Tools/RouteCheck/run.sh                                         # routing check with a quiet test tone (app must be running)
+```
+
+`Sources/RouteCore` has the Core Audio code and the routing engine, `Sources/SoundLanesApp` the menu bar app, and `Sources/soundlanes` the CLI. The full spec, including what was tested and how, is in [`SPEC.md`](SPEC.md) (in Korean).
+
+If you want something polished and supported, Rogue Amoeba's SoundSource does all of this and more. This is a small personal project and isn't related to it.

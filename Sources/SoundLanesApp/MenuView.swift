@@ -115,7 +115,7 @@ struct MenuView: View {
                         section("소리를 내지 않는 앱", others)
                     }
                 }
-                .frame(maxHeight: 440)
+                .frame(maxHeight: 560)
                 .fixedSize(horizontal: false, vertical: true)
             }
             if model.hiddenAppCount > 0 || model.showAllApps {

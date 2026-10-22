@@ -30,7 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return source
         }
         Task {
-            await model.start()
+            if CommandLine.arguments.contains("--demo") {
+                model.loadDemo()
+            } else {
+                await model.start()
+            }
             if let index = CommandLine.arguments.firstIndex(of: "--capture-menu"), index + 1 < CommandLine.arguments.count {
                 await captureMenu(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
                 NSApplication.shared.terminate(nil)
