@@ -93,10 +93,12 @@ struct Status: ParsableCommand {
             print("규칙이 없습니다.")
             return
         }
-        var table = Table("앱", "장치", "상태", "프로세스", "추가 지연", "메시지")
+        var table = Table("앱", "장치", "상태", "프로세스", "추가 지연", "입력 레벨", "IO 주기", "메시지")
         for route in routes {
             table.add(route.bundleID, route.device.name, route.phase.label, String(route.processCount),
                       route.extraLatencyMilliseconds.map { String(format: "%+.0f ms", $0) } ?? "",
+                      route.inputPeak.map { $0 > 0 ? String(format: "%.1f dBFS", 20 * log10($0)) : "무음" } ?? "",
+                      route.ioCycles.map(String.init) ?? "",
                       route.message ?? "")
         }
         print(table.render())

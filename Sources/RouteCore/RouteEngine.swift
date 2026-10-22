@@ -36,6 +36,11 @@ public struct RouteStatus: Codable, Hashable, Sendable, Identifiable {
     public var message: String?
     /// Output device latency minus the default output's latency (SPEC §7.1). Nil when not routing.
     public var extraLatencyMilliseconds: Double?
+    /// Peak of the tapped app audio since the previous `status()` call (linear, before volume). Nil when not routing.
+    public var inputPeak: Float?
+    /// IOProc cycles and cycles without tap data since the route started. Nil when not routing.
+    public var ioCycles: UInt64?
+    public var missingInputCycles: UInt64?
 }
 
 /// Keeps the set of running routes in line with the rules and the hardware (SPEC §4.2).
@@ -129,15 +134,17 @@ public actor RouteEngine {
         slots[ruleID]?.route?.takeReading(resetPeak: true)
     }
 
+    /// Current state of every rule. Resets the per-route input peak, so poll from one place at a time.
     public func status() -> [RouteStatus] {
         let defaultLatency = lastState?.defaultOutput?.latencyMilliseconds
         return rules.map { rule in
             let slot = slots[rule.id]
             var phase = slot?.phase ?? (rule.enabled ? .noProcesses : .disabled)
-            if phase == .running, let route = slot?.route, let startedAt = slot?.startedAt,
-               ContinuousClock.now - startedAt >= permissionGrace {
-                let reading = route.takeReading(resetPeak: false)
-                if reading.cycles == 0, !reading.isRunning { phase = .noPermission }
+            let reading = slot?.route?.takeReading(resetPeak: true)
+            if phase == .running, let reading, let startedAt = slot?.startedAt,
+               ContinuousClock.now - startedAt >= permissionGrace,
+               reading.cycles == 0, !reading.isRunning {
+                phase = .noPermission
             }
             var extraLatency: Double?
             if phase == .running, let defaultLatency,
@@ -147,7 +154,8 @@ public actor RouteEngine {
             return RouteStatus(
                 id: rule.id, bundleID: rule.app.bundleID, device: rule.device, volume: rule.volume,
                 phase: phase, processCount: slot?.processCount ?? 0, message: slot?.message,
-                extraLatencyMilliseconds: extraLatency)
+                extraLatencyMilliseconds: extraLatency,
+                inputPeak: reading?.peak, ioCycles: reading?.cycles, missingInputCycles: reading?.missingInputCycles)
         }
     }
 

@@ -93,17 +93,18 @@ struct Once: AsyncParsableCommand {
         var hinted = false
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(1))
-            if await engine.status().first?.phase == .noPermission {
+            guard let status = await engine.status().first else { continue }
+            if status.phase == .noPermission {
                 stop.request(.permissionDenied)
                 return
             }
-            guard let reading = await engine.takeReading(for: ruleID) else { silentSeconds = 0; continue }
+            guard let peak = status.inputPeak else { silentSeconds = 0; continue }
             if meter {
-                let db = reading.peak > 0 ? 20 * log10(reading.peak) : -.infinity
+                let db = peak > 0 ? 20 * log10(peak) : -.infinity
                 let level = db.isFinite ? String(format: "%6.1f dBFS", db) : "  무음    "
-                print("  레벨 \(level)  IO 주기 \(reading.cycles)  탭 버퍼 없음 \(reading.missingInputCycles)")
+                print("  레벨 \(level)  IO 주기 \(status.ioCycles ?? 0)  탭 버퍼 없음 \(status.missingInputCycles ?? 0)")
             }
-            silentSeconds = reading.peak > 0 ? 0 : silentSeconds + 1
+            silentSeconds = peak > 0 ? 0 : silentSeconds + 1
             if silentSeconds == 5, !hinted {
                 hinted = true
                 print("  ※ 5초 동안 입력이 무음입니다. 앱이 실제로 재생 중인지 확인해 주세요.")

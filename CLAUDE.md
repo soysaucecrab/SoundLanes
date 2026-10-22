@@ -21,6 +21,7 @@ swift run soundlanes devices         # 실행 예
 scripts/bundle-app.sh [debug|release]   # build/SoundLanes.app 생성 + 개발 인증서 서명
 open build/SoundLanes.app            # 앱 실행 (반드시 open으로: 권한이 앱에 귀속됨)
 open -n build/SoundLanes.app --args --capture-menu /tmp/menu.png   # 메뉴 화면을 PNG로 저장 후 종료 (UI 확인용)
+Tools/RouteCheck/run.sh [deviceUID]  # 앱 실행 중에: −60 dBFS 테스트 톤으로 라우팅을 측정 (S1, S3)
 /usr/bin/log stream --predicate 'subsystem == "com.zinu.soundlanes"' --level info   # 로그 확인 (zsh 내장 `log`와 겹치므로 전체 경로)
 ```
 
