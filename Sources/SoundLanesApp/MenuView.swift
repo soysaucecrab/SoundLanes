@@ -31,6 +31,7 @@ struct MenuView: View {
         }
         .padding(.horizontal, 5)
         .frame(width: 330)
+        .background(WindowFitter(trigger: fitKey))
         // Refresh only while the window is open; the engine keeps routing when it is closed.
         .task {
             while !Task.isCancelled {
@@ -44,6 +45,11 @@ struct MenuView: View {
                 await model.refreshStatuses()
             }
         }
+    }
+
+    /// Changes that can make the content shorter. The menu bar window grows on its own but never shrinks.
+    private var fitKey: String {
+        "\(model.mode) \(model.showAllApps) \(model.items.map(\.id)) \(model.config.routes.count) \(model.lastError ?? "")"
     }
 
     private var header: some View {
@@ -309,6 +315,27 @@ private struct MenuItem: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+    }
+}
+
+/// Resizes the hosting window to the content's fitting height, keeping its top edge in place.
+private struct WindowFitter: NSViewRepresentable {
+    let trigger: String
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        Task { @MainActor in
+            await Task.yield()  // let SwiftUI finish laying out the new content first
+            guard let window = view.window, let content = window.contentView else { return }
+            let fitting = content.fittingSize
+            guard fitting.height > 0, abs(fitting.height - content.frame.height) > 0.5 else { return }
+            let height = window.frameRect(forContentRect: NSRect(origin: .zero, size: fitting)).height
+            var frame = window.frame
+            frame.origin.y += frame.height - height
+            frame.size.height = height
+            window.setFrame(frame, display: true)
+        }
     }
 }
 
