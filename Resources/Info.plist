@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.zinu.soundlanes</string>
+	<key>CFBundleName</key>
+	<string>SoundLanes</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>지정한 앱의 소리를 선택한 출력 장치로 보내려면 오디오 캡처 권한이 필요합니다.</string>
+</dict>
+</plist>

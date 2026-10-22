@@ -4,12 +4,12 @@
 예: Music → 내장 스피커, Chrome → AirPods. **전체 요구사항과 설계는 `SPEC.md`가 기준이다.** 구현 전에 반드시 읽는다.
 
 ## 현재 상태
-- 명세만 있음, 코드 없음. 다음 작업은 SPEC §11의 **M0 기술 검증**.
+- **M0 기술 검증 중.** `devices`, `apps`, `once`(검증 도구)가 구현돼 있다. 진행 상황은 SPEC §14.
 - M0 결과(§13 미결정 사항)는 코드보다 먼저 `SPEC.md`에 반영한다.
 
 ## 환경
 - macOS 27.0.1, Apple Silicon (M5), Swift 6.4, Swift Package Manager
-- 배포 최소 버전: macOS 14.2 (`platforms: [.macOS("14.2")]`). Process Tap API가 이 버전부터 있다.
+- 배포 최소 버전: macOS 15.0 (`platforms: [.macOS(.v15)]`). Process Tap API는 14.2부터지만 `Synchronization.Atomic`이 15.0부터다.
 - 대상 모듈: `RouteCore` (라이브러리), `soundlanes` (CLI), `SoundLanesApp` (메뉴 막대 앱, M3부터)
 
 ## 명령
@@ -17,7 +17,7 @@
 swift build                          # 빌드
 swift test                           # 자동 테스트 (RouteCoreTests)
 swift run soundlanes devices         # 실행 예
-log stream --predicate 'subsystem == "com.zinu.soundlanes"'   # 로그 확인
+/usr/bin/log stream --predicate 'subsystem == "com.zinu.soundlanes"' --level info   # 로그 확인 (zsh 내장 `log`와 겹치므로 전체 경로)
 ```
 
 ## 반드시 지킬 것
@@ -41,6 +41,8 @@ log stream --predicate 'subsystem == "com.zinu.soundlanes"'   # 로그 확인
 ## 검증
 - 오디오 동작은 자동 테스트로 확인할 수 없다. 오디오 경로를 바꿨으면 SPEC §12.2의 수동 테스트 중 해당 항목을 사용자에게 요청하고, 결과를 받기 전에는 "동작함"이라고 말하지 않는다.
 - `kill -9` 복구(S4)는 탭/aggregate 생성 코드를 바꿀 때마다 다시 확인한다.
+- 터미널에서 실행하면 오디오 캡처 권한은 터미널 앱에 귀속된다 (SPEC §3.4). 권한이 없으면 `once`는 종료 코드 3으로 끝난다.
+- 탭 문제를 볼 때는 coreaudiod 로그를 함께 본다: `/usr/bin/log stream --predicate 'process == "coreaudiod"'`
 
 ## 주의
 - "SoundSource"는 Rogue Amoeba의 상용 제품명이다. 디렉터리 이름으로만 쓰고, 바이너리·번들 ID·UI 문구에는 쓰지 않는다.

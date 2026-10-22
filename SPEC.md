@@ -1,8 +1,9 @@
-# SoundSource — 앱별 오디오 출력 라우팅 명세서
+# SoundLanes — 앱별 오디오 출력 라우팅 명세서
 
 - 작성일: 2026-10-22
-- 상태: 초안 (구현 전)
-- 대상 환경: macOS 14.2 이상 (개발 기준: macOS 27.0.1, Apple Silicon M5, Swift 6.4)
+- 상태: M0 기술 검증 중 (§14)
+- 대상 환경: macOS 15.0 이상 (개발 기준: macOS 27.0.1, Apple Silicon M5, Swift 6.4)
+  - Process Tap API는 14.2부터 있지만, IOProc 공유 값에 쓰는 `Synchronization.Atomic`이 15.0부터라 최소 버전을 15.0으로 정했다 (2026-10-22).
 
 > **이름 주의**: "SoundSource"는 Rogue Amoeba의 상용 제품명이다. 디렉터리 이름으로만 쓰고,
 > 배포용 앱/바이너리 이름은 **`soundlanes` (CLI) / SoundLanes (앱)** 를 사용한다.
@@ -32,7 +33,7 @@ macOS는 모든 앱이 하나의 "기본 출력 장치"를 공유한다. 앱 자
 - 하나의 앱을 여러 장치로 동시에 출력 (v1 범위 밖, §11 참고)
 - 입력(마이크) 라우팅
 - Mac App Store 배포, iOS 지원
-- macOS 14.2 미만 지원
+- macOS 15.0 미만 지원
 
 ---
 
@@ -92,6 +93,17 @@ macOS는 모든 앱이 하나의 "기본 출력 장치"를 공유한다. 앱 자
   (`-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist`).
 - 터미널에서 실행하면 권한이 **터미널 앱(Ghostty/iTerm)** 에 귀속될 수 있다. 메뉴 막대 앱(M3)은 자체 번들로 권한을 받는다.
 - 권한 거부 시: 명확한 오류 메시지 + 시스템 설정 경로 안내 후 종료 코드 `3`.
+
+#### M0에서 확인한 사실 (2026-10-22, macOS 27.0.1, iTerm2)
+- 터미널에서 실행하면 TCC의 책임 프로세스(responsible process)는 **터미널 앱**이다. CLI에 넣은 Info.plist는 쓰이지 않는다.
+- 터미널 앱 Info.plist에 `NSAudioCaptureUsageDescription`이 없으면(iTerm2가 그렇다) tccd는 **창을 띄우지 않고 거부**한다
+  (`kTCCServiceAudioCapture`, `authValue=0`, `authReason=8`).
+- 거부돼도 탭·aggregate·IOProc 생성과 `AudioDeviceStart`는 모두 성공을 반환한다. IO만 돌지 않는다
+  (`kAudioDevicePropertyDeviceIsRunning = 0`, coreaudiod 로그: `Client is not granted access to the tap.`).
+  → CLI는 "IO 주기 0 + 정지 상태"가 2초 이어지면 권한 없음으로 보고 종료 코드 `3`으로 끝낸다.
+- 우회: 시스템 설정 > 개인정보 보호 및 보안 > 화면 및 시스템 오디오 녹음 > **시스템 오디오 녹음만**에 터미널 앱을 직접 추가한다 (검증 중, §14).
+- 출력 장치에 입력 스트림이 있으면(Background Music 같은 루프백 장치, AirPods 마이크) IOProc 생성이나 스트림 사용 설정 때
+  **마이크 권한(`kTCCServiceMicrophone`)** 검사가 일어난다. 처음에는 확인 창이 뜨고, 응답할 때까지 해당 Core Audio 호출이 멈춘다.
 
 ---
 
@@ -294,3 +306,28 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 4. 실행 중인 탭의 대상 프로세스 목록을 갱신할 수 있는가, 재생성해야 하는가 (§4.3)
 5. CLI 실행 시 TCC 권한 귀속 대상과, 메뉴 막대 앱으로의 권한 이전 방식 (§3.4)
 6. ~~배포 이름 확정~~ → **SoundLanes** (CLI `soundlanes`, 번들 ID `com.zinu.soundlanes`)로 확정
+7. CLI가 터미널 앱 대신 자기 자신으로 TCC 권한을 받게 할지. 방법은 `responsibility_spawnattrs_setdisclaim`(비공개 API)으로 자기 자신을 다시 실행하거나,
+   CLI를 `.app` 번들에 넣는 것. 결정 전까지는 터미널 앱에 권한을 주는 방식으로 쓴다 (§3.4).
+8. macOS 26에 추가된 `CATapDescription.bundleIDs`, `processRestoreEnabled`를 쓸지. 번들 ID로 탭을 지정하고 앱 재실행 시 자동 복원돼
+   §5 헬퍼 매칭과 S3를 단순하게 만들 수 있지만, 최소 버전(15.0)에서는 쓸 수 없어 분기가 필요하다.
+
+---
+
+## 14. M0 검증 기록
+
+검증 도구: `soundlanes once <app> <device> [--meter] [--keep-device-input]`. 시작 시 탭 포맷, 샘플레이트, aggregate 스트림 구성을 출력하고,
+`--meter`는 1초마다 입력 레벨·IO 주기를 표시한다.
+
+| # | 항목 | 상태 | 결과 |
+|---|---|---|---|
+| 1 | 탭 → aggregate → IOProc → start 생성과 역순 정리 | 확인 | HDMI 장치, Background Music 가상 장치에서 생성·SIGINT 정리 성공. 정리 후 남은 aggregate 없음 |
+| 2 | CLI의 TCC 권한 귀속 (§13-5) | 확인 | 터미널 앱에 귀속. 사용 설명 문자열이 없는 터미널은 창 없이 거부 (§3.4) |
+| 3 | 터미널 앱을 "시스템 오디오 녹음만"에 추가하면 동작하는지 | 미확인 | |
+| 4 | 헬퍼 매칭 (§13-1) | 일부 | Chrome 오디오 프로세스가 `com.google.Chrome`, `com.google.Chrome.helper`로 보임 → 접두사 규칙과 맞음. 실제 재생 라우팅은 미확인 |
+| 5 | aggregate 입력 스트림 순서 (장치 입력 다음에 탭) | 미확인 | 구현은 이 순서를 가정하고 앞쪽 장치 입력 스트림을 끈다. 틀리면 `--meter`에 "탭 버퍼 없음"이 늘어난다 |
+| 6 | AirPods 고음질 유지 (§13-3) | 미확인 | 장치 입력 스트림을 IOProc 사용 목록에서 끄는 방식으로 구현. 시작 2초 뒤 샘플레이트가 떨어지면 경고 |
+| 7 | 샘플레이트 불일치 자동 변환 (§13-2) | 미확인 | |
+| 8 | 실행 중 탭 대상 프로세스 갱신 (§13-4) | 미확인 | `kAudioTapPropertyDescription` 쓰기로 시도하고, 거부되면 재생성. 결과를 CLI에 출력 |
+| 9 | `kill -9` 복구 (S4) | 미확인 | |
+
+참고: 개발 맥에는 Rogue Amoeba ARK(`com.rogueamoeba.arkaudiod`)와 Background Music이 설치돼 있다. 결과가 이상하면 이 둘의 영향도 의심한다.
