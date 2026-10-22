@@ -22,6 +22,9 @@ if [[ -z "$identity" ]]; then
   echo "경고: 서명 인증서가 없어 ad-hoc 서명합니다. 다시 빌드할 때마다 오디오 권한을 새로 받아야 할 수 있습니다." >&2
   identity=-
 fi
-codesign --force --options runtime --timestamp=none \
+# Notarization needs a secure timestamp; local development builds skip it.
+timestamp=--timestamp=none
+[[ "$identity" == "Developer ID Application"* ]] && timestamp=--timestamp
+codesign --force --options runtime $timestamp \
   --entitlements Resources/SoundLanes.entitlements --sign "$identity" "$app"
 echo "$app"
