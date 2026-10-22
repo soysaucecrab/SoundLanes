@@ -7,7 +7,7 @@ Send each app's sound to a different output. Music on the MacBook speakers, a Yo
 
 macOS only has one output for everything. SoundLanes sits in the menu bar and lets you pick a device per app. No audio driver is installed: it uses the Core Audio process taps that came with macOS 14.2, so if SoundLanes quits or crashes, sound goes straight back to where it was.
 
-<img src="docs/media/menu.png" width="380" alt="SoundLanes menu: Chrome to AirPods Pro, Music to Studio Display, Slack at 35% on the default output, Podcasts playing">
+<img src="docs/media/menu.png" width="330" alt="SoundLanes menu: Chrome to AirPods Pro, Music to Studio Display, Slack at 35% on the default output, Podcasts playing">
 
 The interface is in Korean.
 
@@ -39,14 +39,14 @@ The first time an app is routed, macOS asks whether SoundLanes can record system
 - Helper processes are included. Chrome and Electron apps (Slack, Discord, …) make their sound in helpers, and those move with the app. Safari plays through a shared WebKit process and is routed with it
 - Follows your devices: take the AirPods out and the app falls back to the default output, put them back in and it moves back. Relaunched apps get their device again
 - Apps you've sent to a specific device stay there when you change the system output
-- A level meter per routed app, and a hint when the target device has noticeably more latency than the default
+- The speaker icon next to each slider moves with the app's level, and a note shows up when the target device is noticeably slower than the default
 - Notifications when a route fails or permission is missing
 - Open at login
 - A command line tool for the same settings
 
 ## Usage
 
-Click the speaker icon in the menu bar. Apps that are playing show up in the list, and each has a device menu and a volume slider. Choosing a device takes effect right away; **기본 출력** (default output) puts the app back. Apps you've set stay at the top, and **소리를 내지 않는 앱 보기** shows the ones that are open but quiet.
+Click the speaker icon in the menu bar. Apps that are playing show up in the list, and each has a device menu and a volume slider. Choosing a device takes effect right away; **기본 출력** (default output) puts the app back. Apps you've set stay at the top, and **조용한 앱도 보기** shows the ones that are open but quiet.
 
 Settings live in `~/Library/Application Support/SoundLanes/routes.json`.
 
