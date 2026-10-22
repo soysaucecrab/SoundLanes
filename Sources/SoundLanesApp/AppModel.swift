@@ -37,6 +37,7 @@ final class AppModel {
     private var lock: InstanceLock?
     private var server: ControlServer?
     private var eventsTask: Task<Void, Never>?
+    private let notifier = Notifier()
     private let log = Logger(subsystem: "com.zinu.soundlanes", category: "App")
     private static let ownerName = "SoundLanes 앱"
 
@@ -64,7 +65,16 @@ final class AppModel {
                 await self?.handle(request) ?? ControlResponse(ok: false, error: "shutting down")
             }
             eventsTask = Task { [weak self] in
-                for await _ in engine.events { await self?.refreshStatuses() }
+                for await event in engine.events {
+                    await self?.refreshStatuses()
+                    if case .started = event.kind {
+                        // Missing permission shows up only as IO that never starts; look again after the grace period.
+                        Task { [weak self] in
+                            try? await Task.sleep(for: .seconds(3))
+                            await self?.refreshStatuses()
+                        }
+                    }
+                }
             }
             try await engine.start(rules: config.routes)
             mode = .active
@@ -110,7 +120,9 @@ final class AppModel {
 
     func refreshStatuses() async {
         guard let engine else { return }
-        statuses = Dictionary(uniqueKeysWithValues: await engine.status().map { ($0.id, $0) })
+        let current = await engine.status()
+        statuses = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
+        notifier.update(current) { AppIcons.name(for: $0) }
     }
 
     // MARK: Rows
