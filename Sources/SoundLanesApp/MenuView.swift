@@ -8,6 +8,7 @@ import SwiftUI
 struct MenuView: View {
     @Bindable var model: AppModel
     @State private var loginItem = LoginItem()
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -31,7 +32,9 @@ struct MenuView: View {
         }
         .padding(.horizontal, 5)
         .frame(width: 330)
-        .background(WindowFitter(trigger: fitKey))
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .background(WindowFitter(contentHeight: contentHeight))
+        .frame(maxHeight: .infinity, alignment: .top)
         // Refresh only while the window is open; the engine keeps routing when it is closed.
         .task {
             while !Task.isCancelled {
@@ -45,11 +48,6 @@ struct MenuView: View {
                 await model.refreshStatuses()
             }
         }
-    }
-
-    /// Changes that can make the content shorter. The menu bar window grows on its own but never shrinks.
-    private var fitKey: String {
-        "\(model.mode) \(model.showAllApps) \(model.items.map(\.id)) \(model.config.routes.count) \(model.lastError ?? "")"
     }
 
     private var header: some View {
@@ -318,23 +316,55 @@ private struct MenuItem: View {
     }
 }
 
-/// Resizes the hosting window to the content's fitting height, keeping its top edge in place.
+/// Keeps the menu bar window glued under the menu bar and as tall as the menu content.
+/// The system window grows with the content but never shrinks: a shorter menu ends up centered in the
+/// old, taller window, which looks like the menu dropped away from the menu bar. The window's own
+/// fitting size is useless here (it reports zero), so the content height is measured in SwiftUI and the
+/// window is resized to it, top edge kept right under our status item.
 private struct WindowFitter: NSViewRepresentable {
-    let trigger: String
+    let contentHeight: CGFloat
 
-    func makeNSView(context: Context) -> NSView { NSView() }
+    func makeNSView(context: Context) -> PinningView { PinningView() }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        Task { @MainActor in
-            await Task.yield()  // let SwiftUI finish laying out the new content first
-            guard let window = view.window, let content = window.contentView else { return }
-            let fitting = content.fittingSize
-            guard fitting.height > 0, abs(fitting.height - content.frame.height) > 0.5 else { return }
-            let height = window.frameRect(forContentRect: NSRect(origin: .zero, size: fitting)).height
-            var frame = window.frame
-            frame.origin.y += frame.height - height
-            frame.size.height = height
-            window.setFrame(frame, display: true)
+    func updateNSView(_ view: PinningView, context: Context) {
+        view.contentHeight = contentHeight
+        Task { @MainActor in view.fit() }
+    }
+
+    final class PinningView: NSView {
+        /// Distance between the menu bar and the top of the menu window, as macOS places it.
+        private static let gap: CGFloat = 2
+        var contentHeight: CGFloat = 0
+        private var observers: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers.removeAll()
+            guard let window else { return }
+            for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+                observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.fit() }
+                })
+            }
+        }
+
+        /// Bottom edge of the menu bar above the window: our status item's window, else the screen's visible top.
+        private var anchorTop: CGFloat? {
+            guard let window, let screen = window.screen ?? NSScreen.main else { return nil }
+            let statusItemBottom = NSApplication.shared.windows
+                .filter { String(describing: type(of: $0)).contains("StatusBar") && screen.frame.contains($0.frame.origin) }
+                .map(\.frame.minY)
+                .max()
+            return (statusItemBottom ?? screen.visibleFrame.maxY) - Self.gap
+        }
+
+        func fit() {
+            guard let window, window.isVisible, contentHeight > 0, let top = anchorTop else { return }
+            let height = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: window.frame.width, height: contentHeight)).height
+            let target = NSRect(x: window.frame.minX, y: top - height, width: window.frame.width, height: height)
+            guard abs(target.height - window.frame.height) > 0.5 || abs(target.maxY - window.frame.maxY) > 0.5 else { return }
+            window.setFrame(target, display: true)
         }
     }
 }
