@@ -36,7 +36,7 @@ The first time an app is routed, macOS asks whether SoundLanes can record system
 
 - Pick an output device for any app that plays sound, right from the menu bar
 - Volume per app, including apps that stay on the default output
-- Helper processes are included. Chrome and Electron apps (Slack, Discord, …) make their sound in helpers, and those move with the app. Safari plays through a shared WebKit process and is routed with it
+- Helper processes are included. Chrome and Electron apps (Slack, Discord, …) make their sound in helpers, and Safari and apps built on WKWebView make it in a WebKit process; those move with the app
 - Follows your devices: take the AirPods out and the app falls back to the default output, put them back in and it moves back. Relaunched apps get their device again
 - Apps you've sent to a specific device stay there when you change the system output
 - The speaker icon next to each slider moves with the app's level, and a note shows up when the target device is noticeably slower than the default
@@ -88,9 +88,9 @@ tccutil reset AudioCapture com.zinu.soundlanes
 
 The video player thinks it's playing on the default output and times the picture for that device, but the sound actually goes to the AirPods, which are slower. There's no way to delay someone else's video. If it bothers you, do it the other way around: make the AirPods the default output and send your music app to the speakers.
 
-### Routing Safari also moves another app
+### An app built on WKWebView doesn't move
 
-Safari and other apps built on WebKit share one audio process, so they move together.
+Its sound comes from a WebKit process that macOS starts for it, not from the app itself. SoundLanes finds which app that process belongs to with a private macOS function (`responsibility_get_pid_responsible_for_pid`). If a future macOS removes it, those apps show up as **Safari 및 WebKit 앱** instead and can only be moved together.
 
 ### People on a call hear an echo
 
