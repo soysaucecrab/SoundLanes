@@ -28,6 +28,8 @@ Tools/RouteCheck/run.sh [deviceUID]  # 앱 실행 중에: −60 dBFS 테스트 �
 
 ## 반드시 지킬 것
 - **드라이버를 만들지 않는다.** 커널 확장, HAL 플러그인(`/Library/Audio/Plug-Ins/HAL`) 금지. 공개 Core Audio Process Tap API만 쓴다.
+  - 예외 하나: 프로세스 소속(WKWebView 앱의 WebKit GPU 프로세스 등)을 알아내려고 비공개 함수 `responsibility_get_pid_responsible_for_pid`를
+    `dlsym`으로 쓴다 (`ResponsibleProcess.swift`, SPEC §5.1, 사용자 결정). 없으면 번들 ID 매칭으로 후퇴한다. 다른 비공개 API는 쓰지 않는다.
 - 탭은 `CATapMuteBehavior.mutedWhenTapped`, aggregate는 `kAudioAggregateDeviceIsPrivateKey = true`로 만든다.
   프로그램이 죽어도 소리가 원래 출력으로 돌아와야 한다 (SPEC §10).
 - 생성 순서는 탭 → aggregate → IOProc → start, 해제는 정확히 그 반대 순서로 한다. 모든 종료 경로(SIGINT, SIGTERM, 오류)에서 정리한다.

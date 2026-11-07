@@ -104,6 +104,8 @@ public actor RouteEngine {
         var failures = 0
         var retryAt: ContinuousClock.Instant?
         var startedAt: ContinuousClock.Instant?
+        /// When the app was first seen playing while the route's IO was not running.
+        var stalledSince: ContinuousClock.Instant?
     }
 
     public init(system: any AudioSystem, debounce: Duration = .milliseconds(200),
@@ -162,10 +164,13 @@ public actor RouteEngine {
             let slot = slots[rule.id]
             var phase = slot?.phase ?? (rule.enabled ? .noProcesses : .disabled)
             let reading = slot?.route?.takeReading(resetPeak: true)
-            if phase == .running, let reading, let startedAt = slot?.startedAt,
-               ContinuousClock.now - startedAt >= permissionGrace,
-               reading.cycles == 0, !reading.isRunning {
-                phase = .noPermission
+            // Missing permission looks like IO that never starts, but so does a silent app (tap auto-start).
+            // Only call it a permission problem when the app is playing and the IO still is not running.
+            if phase == .running, let route = slot?.route, let reading {
+                let stalled = reading.cycles == 0 && !reading.isRunning && route.tappedProcessesAreOutputting
+                let since = stalled ? (slot?.stalledSince ?? ContinuousClock.now) : nil
+                slots[rule.id]?.stalledSince = since
+                if let since, ContinuousClock.now - since >= permissionGrace { phase = .noPermission }
             }
             var extraLatency: Double?
             if phase == .running, let defaultLatency,
@@ -304,6 +309,7 @@ public actor RouteEngine {
         slot.route?.stop()
         slot.route = nil
         slot.startedAt = nil
+        slot.stalledSince = nil
         slot.processCount = 0
     }
 

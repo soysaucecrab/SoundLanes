@@ -11,6 +11,7 @@ private final class FakeRoute: ActiveRoute {
     var refuseUpdates: Bool
     var cycles: UInt64 = 100
     var isRunning = true
+    var tappedProcessesAreOutputting = true
     private(set) var isStopped = false
 
     init(deviceUID: String, processes: [AudioObject], volume: Float, refuseUpdates: Bool) {
@@ -64,7 +65,7 @@ private func device(_ uid: String, isDefault: Bool = false, latency: UInt32 = 48
 
 private func process(_ id: UInt32, _ bundleID: String) -> AudioProcess {
     AudioProcess(object: AudioObject(id), pid: pid_t(id), bundleID: bundleID, isRunningOutput: true,
-                 appName: "Chrome", appBundleID: "com.google.Chrome")
+                 appName: bundleID, appBundleID: bundleID.hasPrefix("com.google.Chrome") ? "com.google.Chrome" : bundleID)
 }
 
 private let chromeToAirPods = RouteRule(
@@ -224,12 +225,30 @@ private func standardState() -> HardwareState {
         #expect(system.routes.isEmpty)
     }
 
-    @Test func stalledIOReportsMissingPermission() async throws {
+    @Test func stalledIOWhilePlayingReportsMissingPermission() async throws {
         let system = FakeSystem(state: standardState())
         let engine = try await makeEngine(system)
         system.live[0].cycles = 0
         system.live[0].isRunning = false
         #expect(await engine.status().first?.phase == .noPermission)
+    }
+
+    @Test func silentAppWithoutIOIsNotAPermissionProblem() async throws {
+        let system = FakeSystem(state: standardState())
+        let engine = try await makeEngine(system)
+        system.live[0].cycles = 0
+        system.live[0].isRunning = false
+        system.live[0].tappedProcessesAreOutputting = false  // tap auto-start waits for the first audio
+        #expect(await engine.status().first?.phase == .running)
+    }
+
+    @Test func permissionProblemNeedsTheStallToLast() async throws {
+        let system = FakeSystem(state: standardState())
+        let engine = RouteEngine(system: system, permissionGrace: .seconds(60))
+        try await engine.start(rules: [chromeToAirPods])
+        system.live[0].cycles = 0
+        system.live[0].isRunning = false
+        #expect(await engine.status().first?.phase == .running)
     }
 
     @Test func stopTearsEverythingDown() async throws {

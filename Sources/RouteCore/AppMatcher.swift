@@ -24,8 +24,15 @@ public enum AppMatcher {
         }
     }
 
+    /// Also true when the process belongs to the rule's app (helpers, the app's WebKit GPU process; SPEC §5.1).
+    public static func matches(_ rule: AppRule, process: AudioProcess) -> Bool {
+        if matches(rule, bundleID: process.bundleID) { return true }
+        return process.isApp && !process.appBundleID.isEmpty
+            && process.appBundleID.caseInsensitiveCompare(rule.bundleID) == .orderedSame
+    }
+
     public static func select(_ rule: AppRule, from processes: [AudioProcess]) -> [AudioProcess] {
-        processes.filter { matches(rule, bundleID: $0.bundleID) }
+        processes.filter { matches(rule, process: $0) }
     }
 }
 
@@ -73,16 +80,18 @@ public enum AppPresets {
         "com.apple.FaceTime", "us.zoom.xos", "com.microsoft.teams2", "com.microsoft.teams", "com.cisco.webexmeetingsapp",
     ]
 
-    /// Extra bundle IDs routed together with `bundleID` by default.
+    /// Extra bundle IDs routed together with `bundleID` by default. Safari used to get `webKitGPU` here; its own
+    /// GPU process is now found through the responsible process, without catching other WebKit apps.
     public static func defaultExtraBundleIDs(for bundleID: String) -> [String] {
-        bundleID.caseInsensitiveCompare("com.apple.Safari") == .orderedSame ? [webKitGPU] : []
+        ResponsibleProcess.isAvailable || bundleID.caseInsensitiveCompare("com.apple.Safari") != .orderedSame
+            ? [] : [webKitGPU]
     }
 
     /// A user-facing caveat for this app, if any.
     public static func warning(for rule: AppRule) -> String? {
         let ids = ([rule.bundleID] + rule.extraBundleIDs).map { $0.lowercased() }
         if ids.contains(webKitGPU.lowercased()) {
-            return "Safari는 공용 WebKit 프로세스로 소리를 내므로 다른 WebKit 앱의 소리도 함께 라우팅될 수 있습니다."
+            return "모든 앱의 WebKit 소리 프로세스를 함께 옮기는 규칙이라 다른 WebKit 앱의 소리도 함께 라우팅됩니다."
         }
         if callApps.contains(where: { $0.lowercased() == rule.bundleID.lowercased() }) {
             return "통화 앱은 출력 장치를 기준으로 에코를 제거하므로 라우팅하면 상대방에게 에코가 들릴 수 있습니다."

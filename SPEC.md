@@ -86,6 +86,9 @@ macOS는 모든 앱이 하나의 "기본 출력 장치"를 공유한다. 앱 자
 - `kAudioAggregateDeviceSubDeviceListKey`: `[{ kAudioSubDeviceUIDKey: 출력 장치 UID }]`
 - `kAudioAggregateDeviceTapListKey`: `[{ kAudioSubTapUIDKey: tap UUID, kAudioSubTapDriftCompensationKey: true }]`
 - `kAudioAggregateDeviceTapAutoStartKey`: `true`
+  - 이 키를 쓰면 `AudioDeviceStart`는 탭한 앱이 **처음 소리를 낼 때까지** IO를 시작하지 않는다 (헤더 문서).
+    그래서 조용한 앱의 라우트는 IO 주기가 0이고 정지 상태다. 이것만으로 권한 없음이라고 판단하면 안 된다.
+  - 권한 없음 판정: 탭한 프로세스 중 하나라도 `kAudioProcessPropertyIsRunningOutput`인데 IO가 돌지 않는 상태가 2초 이어질 때 (2026-11-07 수정).
 
 ### 3.4 권한 (TCC)
 - 오디오 캡처 권한(`NSAudioCaptureUsageDescription`)이 필요하다. 최초 탭 사용 시 시스템이 허용 창을 띄운다.
@@ -172,16 +175,23 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 - 해당 번들 ID와 **같거나 `<번들 ID>.` 로 시작하는** 오디오 프로세스를 모두 포함한다.
   - Chrome: 실제 소리는 `com.google.Chrome.helper` 계열 헬퍼 프로세스에서 난다.
 - 번들 ID가 없는 프로세스는 v1에서 매칭하지 않는다 (CLI에서 PID 직접 지정은 디버그용으로만 제공).
+- **책임 프로세스(responsible process) 매칭** (2026-11-07 추가, 사용자 결정): 프로세스의 책임 프로세스가 속한 앱의 번들 ID가
+  규칙의 번들 ID와 같으면 그 프로세스도 포함한다.
+  - 이유: WKWebView로 소리를 내는 앱(예: GroovSide)은 소리가 앱이 아니라 그 앱을 위해 뜬 `com.apple.WebKit.GPU` XPC 프로세스에서 난다.
+    이 프로세스의 번들 ID로는 어느 앱 소속인지 알 수 없고, launchd 정보에도 나오지 않는다.
+  - 방법: `responsibility_get_pid_responsible_for_pid` (libsystem의 **비공개 함수**, `dlsym`으로 찾는다). 없으면 번들 ID 규칙만 쓴다.
+    오디오 경로는 여전히 공개 Process Tap API만 쓴다. 비공개 함수는 프로세스 소속을 알아내는 데만 쓴다.
+  - 확인: GroovSide(33381)의 WebKit GPU 프로세스(33383) → 33381, Chrome 헬퍼 → Chrome 본체.
+  - 메뉴 막대 앱도 같은 정보로 앱을 묶는다. WebKit GPU 프로세스는 별도 행이 아니라 그 앱의 행에 "재생 중"으로 나온다.
 
 ### 5.2 알려진 특수 케이스
 | 앱 | 문제 | v1 처리 |
 |---|---|---|
-| Safari | 소리가 `com.apple.WebKit.GPU` 등 공용 WebKit 프로세스에서 남. 다른 WebKit 앱과 섞일 수 있음 | 규칙에 `extraBundleIDs`로 명시 지정 가능. 기본 프리셋 제공 + "다른 WebKit 앱도 함께 라우팅될 수 있음" 경고 |
+| Safari, WKWebView 앱 | 소리가 앱마다 따로 뜨는 `com.apple.WebKit.GPU` 프로세스에서 남 | 책임 프로세스 매칭(§5.1)으로 그 앱의 GPU 프로세스만 포함. 다른 WebKit 앱과 섞이지 않음. 책임 프로세스를 알 수 없으면 "Safari 및 WebKit 앱" 행으로 따로 보이고, `extraBundleIDs`에 `com.apple.WebKit.GPU`를 넣으면 모든 WebKit 앱이 함께 옮겨진다는 경고를 낸다 |
 | Electron 앱 (Slack, Notion, VS Code 등) | 헬퍼 번들 ID가 `<id>.helper` 형태 | 기본 규칙으로 처리됨 |
 | Zoom/FaceTime 등 통화 앱 | 음성 처리(에코 제거)가 출력 장치를 기준으로 동작 | 경고만 표시, 막지 않음 |
 
-> 헬퍼 프로세스를 번들 ID 접두사로 찾는 방식이 실제 앱들에서 충분한지는 M0에서 검증한다.
-> 부족하면 "responsible process"(앱을 실행한 부모 앱) 기준 매칭을 추가 검토한다 (비공개 API 사용 여부는 별도 결정).
+> 헬퍼는 번들 ID 접두사로 충분했지만(§14), WKWebView 앱 때문에 책임 프로세스 매칭을 추가했다(§5.1).
 
 ---
 
@@ -320,7 +330,7 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 ---
 
 ## 13. 미결정 사항 (Open Questions)
-1. ~~헬퍼 프로세스 매칭~~ → 번들 ID 접두사로 충분함 (Chrome 확인, §14)
+1. ~~헬퍼 프로세스 매칭~~ → 헬퍼는 번들 ID 접두사로 충분. WKWebView 앱을 위해 책임 프로세스 매칭 추가 (§5.1)
 2. 샘플레이트 불일치 시 aggregate 자동 변환 여부 (§7)
 3. ~~AirPods 고음질 유지~~ → 마이크 스트림을 끈 구성에서 유지됨 (§14)
 4. ~~탭 대상 갱신~~ → macOS 27.0.1에서 실행 중 갱신 가능. 거부 시 재생성 경로 유지 (§14)
@@ -351,6 +361,8 @@ idle → creatingTap → creatingAggregate → running → (stopping) → destro
 | 10 | 앱 소리가 탭을 거쳐 지정 장치까지 가는지 (S1, 측정) | 확인 | `Tools/RouteCheck/run.sh`: −60 dBFS 톤을 내는 테스트 프로세스를 기본 출력(AirPods)이 아닌 내장 스피커로 라우팅. 탭 입력 −60.0 dBFS(재생 진폭과 일치), 스피커 IO 약 95주기/초 |
 | 11 | 프로세스 재실행 시 자동 재적용 (S3, 측정) | 확인 | 같은 도구로 프로세스를 다시 실행하면 같은 레벨로 다시 측정되고, 종료 후에는 "재생 대기"로 돌아가 라우트가 정리됨 |
 | 9 | `kill -9` 복구 (S4) | 확인 | 라우팅 중 `pkill -9 SoundLanes` → Chrome 소리가 바로 기본 출력으로 돌아옴 (청취 확인) |
+| 12 | 조용한 앱의 라우트를 "권한 없음"으로 잘못 표시 (2026-11-07) | 수정 | TapAutoStart 때문에 조용한 앱은 원래 IO가 돌지 않음. 권한 판정에 탭한 프로세스의 재생 여부를 추가 (§3.3) |
+| 13 | WKWebView 앱(GroovSide) 라우팅 (2026-11-07) | 확인 | 책임 프로세스 매칭으로 앱의 WebKit GPU 프로세스를 포함 (§5.1). GroovSide → MacBook 스피커, 기본 출력 AirPods: 스피커에서만 들림 (청취 확인) |
 
 ### 청취 확인 (2026-10-23, 사용자, 앱 `/Applications/SoundLanes.app`, 기본 출력 AirPods Pro)
 | 시나리오 | 결과 |

@@ -85,6 +85,12 @@ public final class TapRoute {
         set { meters.pointee.volumeBits.store(Self.clampVolume(newValue).bitPattern, ordering: .relaxed) }
     }
 
+    public var tappedProcessesAreOutputting: Bool {
+        processes.contains { process in
+            ((try? process.read(kAudioProcessPropertyIsRunningOutput, as: UInt32.self)) ?? 0) != 0
+        }
+    }
+
     /// Returns the peak since the previous reset; `resetPeak` starts a new measurement window.
     public func takeReading(resetPeak: Bool = true) -> MeterReading {
         let peakBits = resetPeak

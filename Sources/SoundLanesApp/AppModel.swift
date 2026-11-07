@@ -160,7 +160,7 @@ final class AppModel {
         var byID: [String: AppItem] = [:]
         for process in processes {
             let bundleID: String
-            if let owner = config.routes.first(where: { AppMatcher.matches($0.app, bundleID: process.bundleID) }) {
+            if let owner = config.routes.first(where: { AppMatcher.matches($0.app, process: process) }) {
                 // Processes a rule already covers (helpers, Safari's WebKit GPU process) belong to that rule's row.
                 bundleID = owner.app.bundleID
             } else if process.isApp {

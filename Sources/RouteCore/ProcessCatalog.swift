@@ -9,11 +9,12 @@ public struct AudioProcess: Hashable, Sendable {
     /// The process's own bundle ID (for helpers, e.g. `com.google.Chrome.helper`). Empty if none.
     public let bundleID: String
     public let isRunningOutput: Bool
-    /// The outermost `.app` bundle containing the executable, e.g. "Google Chrome" for its helpers.
+    /// The app this process belongs to: the outermost `.app` containing the executable ("Google Chrome" for
+    /// its helpers), or, for processes outside any `.app` such as the WebKit GPU process, the responsible app.
     public let appName: String
-    /// Bundle ID of that outermost `.app`, so a helper can be traced back to the app the user knows.
+    /// Bundle ID of that app, so a helper can be traced back to the app the user knows.
     public let appBundleID: String
-    /// The executable lives inside an `.app` bundle (false for daemons and XPC services).
+    /// The process belongs to an app (false for daemons and XPC services whose owner is unknown).
     public let isApp: Bool
 
     public init(object: AudioObject, pid: pid_t, bundleID: String, isRunningOutput: Bool,
@@ -39,7 +40,9 @@ public enum ProcessCatalog {
             guard let pid = try? object.read(kAudioProcessPropertyPID, as: pid_t.self), pid != ownPID else { continue }
             let bundleID = (try? object.readString(kAudioProcessPropertyBundleID)) ?? ""
             let running = ((try? object.read(kAudioProcessPropertyIsRunningOutput, as: UInt32.self)) ?? 0) != 0
-            let app = outerApp(of: pid)
+            // WKWebView apps play through a WebKit GPU process that lives in a system framework; its owner is
+            // only known through the responsible process (SPEC §5.1).
+            let app = outerApp(of: pid) ?? ResponsibleProcess.pid(for: pid).flatMap(outerApp(of:))
             result.append(AudioProcess(
                 object: object, pid: pid, bundleID: bundleID, isRunningOutput: running,
                 appName: app?.name ?? executableName(of: pid) ?? bundleID,

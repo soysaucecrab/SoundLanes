@@ -23,6 +23,9 @@ public protocol ActiveRoute: AnyObject {
     /// Retarget to a new process set; throws if this must be done by recreating the route.
     func updateProcesses(_ processes: [AudioObject]) throws
     func takeReading(resetPeak: Bool) -> MeterReading
+    /// Whether any tapped process is playing right now. With tap auto-start the IO only runs once one does,
+    /// so a silent app's route has no IO without anything being wrong (SPEC §3.3).
+    var tappedProcessesAreOutputting: Bool { get }
     func stop()
 }
 

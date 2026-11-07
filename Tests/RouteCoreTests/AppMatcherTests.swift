@@ -129,3 +129,34 @@ private func process(_ id: UInt32, _ bundleID: String, app: String = "App", appB
         #expect(fourCharCode(-50) == "-50")
     }
 }
+
+@Suite struct ResponsibleMatchingTests {
+    private func gpuProcess(owner: String?) -> AudioProcess {
+        AudioProcess(object: AudioObject(50), pid: 50, bundleID: "com.apple.WebKit.GPU", isRunningOutput: true,
+                     appName: owner == nil ? "com.apple.WebKit.GPU" : "GroovSide",
+                     appBundleID: owner ?? "com.apple.WebKit.GPU", isApp: owner != nil)
+    }
+
+    @Test func webKitProcessBelongsToItsApp() {
+        let groovSide = AppRule(bundleID: "kim.zinu.groovside")
+        #expect(AppMatcher.matches(groovSide, process: gpuProcess(owner: "kim.zinu.groovside")))
+        #expect(!AppMatcher.matches(AppRule(bundleID: "com.apple.Safari"), process: gpuProcess(owner: "kim.zinu.groovside")))
+    }
+
+    @Test func unknownOwnerFallsBackToBundleID() {
+        #expect(!AppMatcher.matches(AppRule(bundleID: "kim.zinu.groovside"), process: gpuProcess(owner: nil)))
+        let legacy = AppRule(bundleID: "com.apple.Safari", extraBundleIDs: ["com.apple.WebKit.GPU"])
+        #expect(AppMatcher.matches(legacy, process: gpuProcess(owner: nil)))
+    }
+
+    @Test func lookupFindsOwnerOfChildProcess() throws {
+        // A process we start is our responsibility; the lookup must not return the child itself.
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["2"]
+        try child.run()
+        defer { child.terminate() }
+        guard ResponsibleProcess.isAvailable else { return }
+        #expect(ResponsibleProcess.pid(for: child.processIdentifier) != child.processIdentifier)
+    }
+}
